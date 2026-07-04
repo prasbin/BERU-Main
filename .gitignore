@@ -1,0 +1,28 @@
+# Secrets and runtime state
+config/api_keys.json
+memory/runtime/
+memory/long_term.json
+memory/deadlines.json
+memory/missions.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Playwright / browser profiles
+.beru_profiles/
+
+# Build
+dist/
+build/
+*.spec

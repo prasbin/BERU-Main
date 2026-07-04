@@ -1,0 +1,32 @@
+{
+  "_help": {
+    "description": "Edit jobs below to change BERU background schedules (local PC time).",
+    "hour": "0-23, 24-hour clock",
+    "minute": "0-59",
+    "weekdays": "0=Monday, 1=Tuesday, ... 6=Sunday. Use [] for every day.",
+    "agent": "IGRIS | TANK | DHANUS | BERU (BERU uses full shadow delegation)",
+    "enabled": "Set false to pause a job without deleting it"
+  },
+  "jobs": [
+    {
+      "job_id": "mst_morning_check",
+      "title": "Assignment Monitoring",
+      "goal": "Check mySecondTeacher for new assignments, notices, deadlines, announcements and updates. Summarize anything urgent.",
+      "agent": "IGRIS",
+      "hour": 7,
+      "minute": 0,
+      "weekdays": [0, 1, 2, 3, 4],
+      "enabled": true
+    },
+    {
+      "job_id": "deadline_evening_review",
+      "title": "Deadline Review",
+      "goal": "Report all active tracked deadlines, flag anything overdue or due within 48 hours.",
+      "agent": "IGRIS",
+      "hour": 18,
+      "minute": 30,
+      "weekdays": [0, 1, 2, 3, 4],
+      "enabled": false
+    }
+  ]
+}
