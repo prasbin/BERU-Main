@@ -1,0 +1,25 @@
+[project]
+name = "beru"
+version = "0.1.0"
+description = "BERU — a modular personal AI operating system / agent backend."
+requires-python = ">=3.10"
+# NOTE: runtime dependencies are managed in requirements.txt (source of truth).
+# This section documents metadata only; installs use the requirements files.
+
+[tool.pytest.ini_options]
+# asyncio_mode = auto lets async test functions run without an explicit marker.
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra -q"
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["B008"]  # FastAPI uses function calls (Depends(...)) in argument defaults.

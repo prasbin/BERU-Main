@@ -1,0 +1,16 @@
+# Build context exclusions — keep the image to runtime artifacts only.
+.git
+.github
+.pytest_cache
+.ruff_cache
+__pycache__
+**/__pycache__
+*.pyc
+tests
+docs
+.env
+beru.db
+beru.db-*
+*.log
+runlog*.txt
+.DS_Store

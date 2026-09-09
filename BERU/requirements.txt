@@ -1,0 +1,30 @@
+# BERU runtime dependencies (source of truth for installs).
+# Install with:  pip install -r requirements.txt
+#
+# Version policy: conservative lower bounds, no aggressive upper caps, so the
+# foundation stays installable as the ecosystem moves. Pin exact versions in a
+# lockfile for production deployments.
+
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.6
+pydantic-settings>=2.2
+SQLAlchemy>=2.0.29
+aiosqlite>=0.19
+alembic>=1.13
+httpx>=0.27
+
+# Desktop control (screenshot, mouse, keyboard) — free/open-source, local-first.
+# pyautogui pulls in its own deps and provides mouse/keyboard input + screenshots;
+# mss offers a fast full-screen grab; Pillow computes screen-state metadata;
+# pyperclip provides cross-platform clipboard access; psutil inspects processes.
+pyautogui>=0.9.50
+mss>=9.0
+Pillow>=10.0
+pyperclip>=1.8
+psutil>=5.9
+
+# Browser automation (real page control). Optional — if Playwright is not
+# installed the browser engine reports "unavailable" instead of failing.
+# After installing, run:  playwright install chromium
+playwright>=1.40
