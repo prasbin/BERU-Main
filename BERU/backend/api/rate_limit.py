@@ -115,6 +115,13 @@ class RateLimiter:
 _global_limiter: RateLimiter | None = None
 
 
+def reset_rate_limiters() -> None:
+    """Drop the cached limiter instances (test isolation)."""
+    global _global_limiter, _auth_limiter
+    _global_limiter = None
+    _auth_limiter = None
+
+
 def get_rate_limiter(settings: Settings = Depends(get_settings)) -> RateLimiter:
     """Return (and cache) the process-wide rate limiter instance."""
     global _global_limiter

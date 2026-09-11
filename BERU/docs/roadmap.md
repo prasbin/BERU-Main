@@ -409,20 +409,20 @@ tests and a `python -m scripts.release check` gate; they should be built in
 dependency order 5.1 → 5.2, 5.3 → 5.4 (5.1 and 5.4 are independent of each
 other).
 
-- 🔜 **5.1 Accounts & multi-user isolation** — today auth is one shared API key
+- ✅ **5.1 Accounts & multi-user isolation** — today auth is one shared API key
   with a volatile in-memory session store (`backend/api/security.py`) and no
   user table. Deliverables: a `users` migration; a durable, DB-backed session
   store that survives restarts; first-run bootstrap of an owner account; per-user
   ownership and scoping of conversations/facts/projects (user A cannot see
   user B's data); per-user rate limits and login. Gate: isolation + persistence
   tests green.
-- 🔜 **5.2 Real database support (PostgreSQL)** — Postgres is nominal today:
-  no `asyncpg`/`psycopg` in requirements, backup is SQLite-file-only
-  (`backend/services/backup.py`), and the instance lock skips non-SQLite
+- ✅ **5.2 Real database support (PostgreSQL)** — Postgres is nominal today:
+  no `asyncpg`/`psycopg` in requirements, backup was SQLite-file-only
+  (`backend/services/backup.py`), and the instance lock skipped non-SQLite
   (`backend/database/lock.py`). Deliverables: add the async drivers; make backup
   and the instance lock driver-agnostic; run the full suite on SQLite and
   Postgres in CI; compose file + docs. Gate: full suite green on Postgres.
-- 🔜 **5.3 Extension platform (packaging + plugins + real voice)** —
+- ✅ **5.3 Extension platform (packaging + plugins + real voice)** —
   `pyproject.toml` has no `[build-system]` (so `pip install .` fails) and every
   provider requires editing a hardcoded factory. Deliverables: add
   `[build-system]` + setuptools so `python -m build` / `pip install .` work and
@@ -430,7 +430,7 @@ other).
   tools/agents/providers with the current registry as fallback; ship whisper STT
   + edge-tts TTS as first-party optional-extra plugins. Gate: install a sample
   tool from a wheel in a clean test env.
-- 🔜 **5.4 Host hardening (tool sandbox)** — `CommandExecutor` is an allowlist +
+- ✅ **5.4 Host hardening (tool sandbox)** — `CommandExecutor` is an allowlist +
   pattern-blocklist over a full-privilege child process. Deliverables:
   least-privilege service account for subprocesses; per-tool credential scoping
   (tools get scoped keys, not the global API key); an optional container

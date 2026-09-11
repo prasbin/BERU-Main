@@ -3,11 +3,13 @@ pre-release smoke gate.
 
 Subcommands
 -----------
-``python -m scripts.release check [--skip-tests]``
+``python -m scripts.release check [--skip-tests] [--postgres]``
     Pre-release gate. Verifies version consistency, singles Alembic head,
     migration round-trip on a throwaway database, ruff, ``node --check``, and
     (unless skipped with ``--skip-tests``) the full pytest suite and lockfile
-    sanity. Exit code is 0 only when every step passes.
+    sanity. Exit code is 0 only when every step passes. With ``--postgres``
+    (requires ``pip install -r requirements-pg.txt``) the full suite is also
+    re-run against an embedded PostgreSQL instance.
 
 ``python -m scripts.release bump <major|minor|patch|X.Y.Z>``
     Bump the project version in its single source of truth
@@ -147,7 +149,7 @@ def _run(cmd: list[str], label: str) -> None:
         raise RuntimeError(f"'{label}' failed with exit code {result.returncode}")
 
 
-def run_suite(skip_tests: bool) -> None:
+def run_suite(skip_tests: bool, postgres: bool) -> None:
     _run(
         [sys.executable, "-m", "ruff", "check", "backend", "tests", "scripts"],
         "ruff",
@@ -155,6 +157,8 @@ def run_suite(skip_tests: bool) -> None:
     _run(["node", "--check", "frontend/app.js"], "node --check")
     if not skip_tests:
         _run([sys.executable, "-m", "pytest", "-q"], "pytest")
+    if postgres:
+        _run([sys.executable, "-m", "scripts.test_postgres", "--", "-q"], "pytest (PostgreSQL)")
 
 
 def check_locks() -> None:
@@ -192,11 +196,16 @@ def cmd_check(args: argparse.Namespace) -> int:
         migration_roundtrip()
         steps.append("migration round-trip OK")
 
-        run_suite(skip_tests=args.skip_tests)
+        run_suite(
+            skip_tests=args.skip_tests,
+            postgres=getattr(args, "postgres", False),
+        )
         if args.skip_tests:
             steps.append("ruff + node --check (tests skipped)")
         else:
             steps.append("ruff + node --check + full pytest")
+        if getattr(args, "postgres", False):
+            steps.append("full suite re-run against embedded PostgreSQL")
 
         check_locks()
         steps.append("lockfiles present and parseable")
@@ -391,6 +400,12 @@ def main(argv: list[str] | None = None) -> int:
         "--skip-tests",
         action="store_true",
         help="Skip the full pytest suite (still runs ruff + node --check + migrations).",
+    )
+    check_p.add_argument(
+        "--postgres",
+        action="store_true",
+        help="Also run the full suite against an embedded PostgreSQL "
+        "(`pip install pgserver` first).",
     )
     check_p.set_defaults(func=cmd_check)
 

@@ -5,11 +5,11 @@ from __future__ import annotations
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.agents.registry import get_agent_registry
 from backend.core.config import Settings, get_settings
-from backend.database.base import Base, get_session
+from backend.database.base import get_session
 from backend.engines.intelligence import get_intelligence_engine
 from backend.engines.llm.registry import reset_llm_provider
 from backend.main import create_app
@@ -20,16 +20,11 @@ TEST_API_KEY = "test-secret-key-12345"
 
 @pytest_asyncio.fixture
 async def _sessionmaker(tmp_path):
-    """Create a temp SQLite database with the full schema; yield a sessionmaker."""
-    import backend.models  # noqa: F401
+    """A fresh database with the full schema; yield a sessionmaker."""
+    import tests.db as testdb
 
-    db_path = tmp_path / "test.db"
-    engine = create_async_engine(
-        f"sqlite+aiosqlite:///{db_path}",
-        connect_args={"check_same_thread": False},
-    )
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    engine = testdb.make_test_engine(tmp_path)
+    await testdb.prepare_schema(engine)
 
     maker = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
     yield maker

@@ -82,14 +82,19 @@ class IntelligenceEngine:
         agent_name: str | None,
         tool_call: ToolCall,
         confirm: bool = False,
+        settings: Settings | None = None,
     ) -> ToolResult:
         """Resolve the agent and execute one explicit tool call.
 
         The confirmation flow uses this to run a previously pending (approval
         gated) tool with ``confirm=True`` once the user has approved it.
+        ``settings`` is threaded through so the tool receives its scoped
+        credential view even on the confirmation re-injection path.
         """
         agent = self._registry.get(agent_name)
-        return await agent.run_tool(tool_call, confirm=confirm, agent_name=agent_name)
+        return await agent.run_tool(
+            tool_call, confirm=confirm, agent_name=agent_name, settings=settings
+        )
 
     async def continue_after_tool(
         self,

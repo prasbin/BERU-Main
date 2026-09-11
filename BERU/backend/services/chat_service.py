@@ -422,6 +422,7 @@ class ChatService:
             agent_name=agent_name,
             tool_call=tool_call,
             confirm=True,
+            settings=settings,
         )
         # Record approval audit entry.
         try:

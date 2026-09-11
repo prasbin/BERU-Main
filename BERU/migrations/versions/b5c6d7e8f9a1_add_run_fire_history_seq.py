@@ -24,6 +24,26 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
+def _backfill_seq(table_name: str) -> None:
+    """Fill ``seq`` for rows that predate the column.
+
+    SQLite numbers existing rows by its monotonic ``rowid`` (insertion order).
+    Postgres has no ``rowid``, so rows are numbered deterministically in
+    (``created_at``, ``id``) order instead — equivalent in spirit, and a
+    no-op on fresh databases (which is what PostgreSQL installs start as).
+    """
+    if op.get_bind().dialect.name == "sqlite":
+        op.execute(f"UPDATE {table_name} SET seq = rowid")
+    else:
+        op.execute(
+            sa.text(
+                f"UPDATE {table_name} SET seq = r.seq FROM ("
+                f"SELECT id, ROW_NUMBER() OVER (ORDER BY created_at, id) AS seq "
+                f"FROM {table_name}) r WHERE {table_name}.id = r.id"
+            )
+        )
+
+
 def upgrade() -> None:
     with op.batch_alter_table("task_runs", schema=None) as batch_op:
         batch_op.add_column(
@@ -33,8 +53,8 @@ def upgrade() -> None:
             "ck_task_runs_seq_nonneg", "seq >= 0"
         )
         batch_op.create_index("ix_task_runs_seq", ["seq"])
-    # Backfill legacy rows in insertion order (SQLite rowid is monotonic).
-    op.execute("UPDATE task_runs SET seq = rowid")
+    # Backfill legacy rows in a dialect-aware insertion order.
+    _backfill_seq("task_runs")
     with op.batch_alter_table("task_runs", schema=None) as batch_op:
         batch_op.alter_column("seq", server_default=None)
 
@@ -46,7 +66,7 @@ def upgrade() -> None:
             "ck_trigger_fires_seq_nonneg", "seq >= 0"
         )
         batch_op.create_index("ix_trigger_fires_seq", ["seq"])
-    op.execute("UPDATE trigger_fires SET seq = rowid")
+    _backfill_seq("trigger_fires")
     with op.batch_alter_table("trigger_fires", schema=None) as batch_op:
         batch_op.alter_column("seq", server_default=None)
 

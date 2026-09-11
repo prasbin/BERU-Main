@@ -56,20 +56,22 @@ def get_engine() -> AsyncEngine:
     """Return the process-wide async engine, created on first use."""
     settings = get_settings()
     connect_args: dict = {}
-    if settings.database_url.startswith("sqlite"):
+    url = settings.database_url
+    db_prefix = "sqlite" if url.startswith("sqlite") else "postgres"
+    if url.startswith("sqlite"):
         # Allow SQLite connections to be used across the async event loop tasks.
         connect_args["check_same_thread"] = False
         # Note: no explicit pool_size here — aiosqlite resolves NullPool by
         # default, so each short-lived session uses its own connection and
         # long LLM streams (which no longer hold sessions) never pin the pool.
     engine = create_async_engine(
-        settings.database_url,
+        _normalise_async_url(url),
         echo=settings.db_echo,
         future=True,
         pool_pre_ping=True,
         connect_args=connect_args,
     )
-    if settings.database_url.startswith("sqlite"):
+    if db_prefix == "sqlite":
         event.listen(engine.sync_engine, "connect", _set_sqlite_pragmas)
     return engine
 
@@ -82,6 +84,20 @@ def get_sessionmaker() -> async_sessionmaker[AsyncSession]:
         expire_on_commit=False,
         class_=AsyncSession,
     )
+
+
+def _normalise_async_url(url: str) -> str:
+    """Return ``url`` in a form the async engine can consume.
+
+    A bare ``postgresql://`` (or legacy ``postgres://``) DSN has no async
+    driver, so it is upgraded to asyncpg; ``sqlite`` / already-qualified URLs
+    pass through unchanged.
+    """
+    if url.startswith("postgres://"):
+        return "postgresql+asyncpg://" + url[len("postgres://") :]
+    if url.startswith("postgresql://"):
+        return "postgresql+asyncpg://" + url[len("postgresql://") :]
+    return url
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:

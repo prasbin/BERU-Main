@@ -105,9 +105,11 @@ def test_migration_upgrade_creates_expected_schema(tmp_path: Path):
             if c["name"]
         }
         assert "uq_facts_user_key" in facts_constraints
-        # The global unique key index is replaced by the per-user pair.
-        facts_indexes = {ix["name"] for ix in inspector.get_indexes("facts")}
-        assert "ix_facts_key" not in facts_indexes
+        facts_indexes = {ix["name"]: ix for ix in inspector.get_indexes("facts")}
+        # Global key uniqueness is preserved for system/owner rows via a partial
+        # unique index; the plain key index remains for lookups.
+        assert "ix_facts_key" in facts_indexes
+        assert facts_indexes["uq_facts_system_key"]["unique"]
 
         projects_cols = {c["name"] for c in inspector.get_columns("projects")}
         assert "user_id" in projects_cols
@@ -117,6 +119,8 @@ def test_migration_upgrade_creates_expected_schema(tmp_path: Path):
             if c["name"]
         }
         assert "uq_projects_user_name" in projects_constraints
+        projects_indexes = {ix["name"]: ix for ix in inspector.get_indexes("projects")}
+        assert projects_indexes["uq_projects_system_name"]["unique"]
 
         msg_cols = {c["name"] for c in inspector.get_columns("messages")}
         assert msg_cols == {

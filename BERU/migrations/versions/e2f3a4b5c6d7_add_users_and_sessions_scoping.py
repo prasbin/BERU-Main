@@ -35,7 +35,7 @@ def upgrade() -> None:
         "users",
         sa.Column("username", sa.String(length=64), nullable=False),
         sa.Column("password_hash", sa.String(length=512), nullable=True),
-        sa.Column("is_owner", sa.Boolean(), nullable=False, server_default=sa.text("0")),
+        sa.Column("is_owner", sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.Column("id", sa.String(length=36), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
@@ -75,16 +75,28 @@ def upgrade() -> None:
             "fk_conversations_user_id", "users", ["user_id"], ["id"], ondelete="CASCADE"
         )
 
-    # Facts lose the global unique key index in favour of a per-user one.
+    # The global unique key index is replaced by a non-unique lookup index plus
+    # per-user uniqueness.
     with op.batch_alter_table("facts", schema=None) as batch_op:
         batch_op.drop_index(batch_op.f("ix_facts_key"))
         batch_op.add_column(sa.Column("user_id", sa.String(length=36), nullable=True))
+        batch_op.create_index(batch_op.f("ix_facts_key"), ["key"], unique=False)
         batch_op.create_index(batch_op.f("ix_facts_user_id"), ["user_id"], unique=False)
         batch_op.create_foreign_key(
             "fk_facts_user_id", "users", ["user_id"], ["id"], ondelete="CASCADE"
         )
         batch_op.create_unique_constraint(
             "uq_facts_user_key", ["user_id", "key"]
+        )
+        # NULL user_id rows (system/owner, legacy single-user mode) are exempt
+        # from the composite unique in SQLite/Postgres (NULLs are distinct), so
+        # a partial unique index restores global key uniqueness for them.
+        batch_op.create_index(
+            "uq_facts_system_key",
+            ["key"],
+            unique=True,
+            sqlite_where=sa.text("user_id IS NULL"),
+            postgresql_where=sa.text("user_id IS NULL"),
         )
 
     with op.batch_alter_table("projects", schema=None) as batch_op:
@@ -99,10 +111,19 @@ def upgrade() -> None:
         batch_op.create_unique_constraint(
             "uq_projects_user_name", ["user_id", "name"]
         )
+        # ... with global name uniqueness preserved for system/owner rows.
+        batch_op.create_index(
+            "uq_projects_system_name",
+            ["name"],
+            unique=True,
+            sqlite_where=sa.text("user_id IS NULL"),
+            postgresql_where=sa.text("user_id IS NULL"),
+        )
 
 
 def downgrade() -> None:
     with op.batch_alter_table("projects", schema=None) as batch_op:
+        batch_op.drop_index("uq_projects_system_name")
         batch_op.drop_constraint("uq_projects_user_name", type_="unique")
         batch_op.drop_constraint("fk_projects_user_id", type_="foreignkey")
         batch_op.drop_index(batch_op.f("ix_projects_user_id"))
@@ -112,9 +133,11 @@ def downgrade() -> None:
         batch_op.create_index(batch_op.f("ix_projects_name"), ["name"], unique=True)
 
     with op.batch_alter_table("facts", schema=None) as batch_op:
+        batch_op.drop_index("uq_facts_system_key")
         batch_op.drop_constraint("uq_facts_user_key", type_="unique")
         batch_op.drop_constraint("fk_facts_user_id", type_="foreignkey")
         batch_op.drop_index(batch_op.f("ix_facts_user_id"))
+        batch_op.drop_index(batch_op.f("ix_facts_key"))
         batch_op.drop_column("user_id")
         # Restore the global unique key index from the original schema.
         batch_op.create_index(batch_op.f("ix_facts_key"), ["key"], unique=True)

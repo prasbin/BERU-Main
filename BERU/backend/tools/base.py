@@ -4,6 +4,11 @@ Every tool declares a name, a human description, the permissions it requires,
 and a JSON-schema-like parameter description (usable later for LLM function
 calling). Tools return a structured :class:`ToolResult` rather than raising, so
 callers can handle failure uniformly.
+
+Credential scoping (Stage 5.4): tools that need provider API keys declare them
+via ``required_credentials`` (a list of names such as ``["llm_api_key"]``).
+Before each run the agent injects a :class:`backend.tools.credentials.ScopedCredentials`
+view into ``Tool.credentials`` — never the global owner key.
 """
 
 from __future__ import annotations
@@ -98,6 +103,15 @@ class Tool(ABC):
     #: "unavailable". A stub/emulated tool must be "unavailable"; one that works
     #: but covers only a subset of its advertised behaviour is "limited".
     availability: str = "available"
+
+    #: Provider credential names this tool requires.  The agent injects a
+    #: scoped view (never the global ``BERU_API_KEY``) into ``credentials``
+    #: before each run — see :mod:`backend.tools.credentials`.
+    required_credentials: list[str] = []
+
+    #: Scoped credential view injected by the agent before each run.
+    #: Defaults to an empty scope; tools read via ``self.credentials.get(...)``.
+    credentials: Any = None  # ScopedCredentials — typed loosely to avoid circular import
 
     @abstractmethod
     async def run(self, **kwargs: Any) -> ToolResult:

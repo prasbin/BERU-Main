@@ -151,6 +151,11 @@ class Settings(BaseSettings):
     # behind the same protocol interface (e.g. whisper, edge-tts) when installed.
     voice_stt_provider: str = Field(default="mock", alias="BERU_VOICE_STT_PROVIDER")
     voice_tts_provider: str = Field(default="mock", alias="BERU_VOICE_TTS_PROVIDER")
+    # Whisper model size for BERU_VOICE_STT_PROVIDER=whisper
+    # (tiny | base | small | medium | large).
+    voice_stt_model: str = Field(default="base", alias="BERU_VOICE_STT_MODEL")
+    # Edge voice identifier for BERU_VOICE_TTS_PROVIDER=edge_tts.
+    voice_tts_voice: str = Field(default="en-US-JennyNeural", alias="BERU_VOICE_TTS_VOICE")
     # Comma-separated wake words (case-insensitive), e.g. "beru,hey beru".
     voice_wake_words: str = Field(default="beru", alias="BERU_VOICE_WAKE_WORDS")
     # Maximum audio payload accepted per request/session in bytes.
@@ -160,6 +165,18 @@ class Settings(BaseSettings):
     # Default audio formats for synthesis (see engines/speech.py).
     voice_sample_rate: int = Field(default=16_000, alias="BERU_VOICE_SAMPLE_RATE")
     voice_channels: int = Field(default=1, alias="BERU_VOICE_CHANNELS")
+
+    # ---- Command sandbox (host hardening, Stage 5.4) ----
+    # Execution backend for tool/API commands: "host" (local subprocess) or
+    # "container" (docker exec into ``command_container``). The allowlist +
+    # pattern-blocklist guardrail is identical in both backends.
+    command_executor: str = Field(default="host", alias="BERU_COMMAND_EXECUTOR")
+    # Container name/id to run commands in when command_executor == "container".
+    command_container: str = Field(default="", alias="BERU_COMMAND_CONTAINER")
+    # Least-privilege account for host subprocesses (POSIX setuid. Windows hosts
+    # refuse this and require the container backend). Blank = run as-is.
+    command_run_user: str = Field(default="", alias="BERU_COMMAND_RUN_USER")
+    command_run_group: str = Field(default="", alias="BERU_COMMAND_RUN_GROUP")
 
     # ---- Derived helpers ----
     @property

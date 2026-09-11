@@ -3,6 +3,20 @@
 Provides a controlled interface for executing shell commands, with allowlists,
 timeout enforcement, output capture, and audit logging. Commands run in a
 subprocess with restricted capabilities.
+
+Host hardening (Stage 5.4):
+
+* **Least-privilege account** — when ``BERU_COMMAND_RUN_USER`` /
+  ``BERU_COMMAND_RUN_GROUP`` are set, POSIX hosts drop privileges for the child
+  (``setuid``). Windows cannot drop privileges through a stdlib subprocess, so
+  a configured account is refused with a ``BLOCKED`` result rather than
+  silently ignored — use the container backend there.
+* **Container backend** — :class:`backend.engines.container.ContainerCommandExecutor`
+  runs the same guardrail layer (allowlist + pattern-blocklist) and executes
+  via ``docker exec``, so destructive commands are blocked in every backend.
+
+The allowlist + pattern-blocklist guardrail remains the primary defense and is
+identical across backends.
 """
 
 from __future__ import annotations
@@ -17,6 +31,8 @@ from datetime import datetime, timezone
 from enum import Enum
 from functools import lru_cache
 from typing import Any
+
+from backend.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -165,6 +181,9 @@ class CommandExecutor:
         blocked_commands: list[str] | None = None,
         timeout_seconds: float = 30,
         max_output_bytes: int = 1024 * 1024,  # 1MB
+        *,
+        user: str | None = None,
+        group: str | None = None,
     ) -> None:
         self._allowed = allowed_commands
         self._blocked = blocked_commands or self.DEFAULT_BLOCKED
@@ -172,6 +191,8 @@ class CommandExecutor:
         self._max_output = max_output_bytes
         self._history: list[CommandResult] = []
         self._platform = platform.system().lower()
+        self._user = user
+        self._group = group
 
     def _is_blocked(self, command: str) -> str | None:
         """Check if a command is blocked. Returns block reason or None."""
@@ -201,8 +222,19 @@ class CommandExecutor:
         if len(self._history) > _MAX_HISTORY:
             self._history = self._history[-_MAX_HISTORY:]
 
-    def _build_shell_command(self, command: str) -> list[str]:
-        """Build the appropriate shell command for the platform."""
+    def _build_shell_command(
+        self,
+        command: str,
+        *,
+        cwd: str | None = None,
+        env: dict[str, str] | None = None,
+    ) -> list[str]:
+        """Build the appropriate shell command for the platform.
+
+        ``cwd`` and ``env`` are accepted for override parity with container
+        backends; the host backend applies them via ``create_subprocess_exec``
+        kwargs rather than encoding them in the argv list.
+        """
         if self._platform == "windows":
             return ["cmd", "/c", command]
         else:
@@ -234,19 +266,43 @@ class CommandExecutor:
             self._append(result)
             return result
 
+        # Least-privilege enforcement
+        effective_user = self._user
+        effective_group = self._group
+        if (effective_user or effective_group) and self._platform == "windows":
+            result.status = CommandStatus.BLOCKED
+            result.blocked_reason = (
+                "Least-privilege execution (BERU_COMMAND_RUN_USER/GROUP) is not supported "
+                "on Windows host subprocesses; use BERU_COMMAND_EXECUTOR=container for "
+                "isolated execution."
+            )
+            self._append(result)
+            return result
+
         result.status = CommandStatus.RUNNING
         result.started_at = datetime.now(timezone.utc)
 
         effective_timeout = timeout or self._timeout
-        shell_cmd = self._build_shell_command(command)
+        shell_cmd = self._build_shell_command(command, cwd=cwd, env=env)
 
         try:
+            subprocess_kwargs: dict[str, Any] = {
+                "stdout": asyncio.subprocess.PIPE,
+                "stderr": asyncio.subprocess.PIPE,
+            }
+            if cwd:
+                subprocess_kwargs["cwd"] = cwd
+            if env:
+                subprocess_kwargs["env"] = {**os.environ, **env}
+            if self._platform != "windows":
+                if effective_user:
+                    subprocess_kwargs["user"] = effective_user
+                if effective_group:
+                    subprocess_kwargs["group"] = effective_group
+
             process = await asyncio.create_subprocess_exec(
                 *shell_cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=cwd,
-                env={**os.environ, **(env or {})},
+                **subprocess_kwargs,
             )
 
             try:
@@ -300,5 +356,31 @@ class CommandExecutor:
 
 @lru_cache
 def get_command_executor() -> CommandExecutor:
-    """Return the process-wide command executor (shared by API + agent tools)."""
-    return CommandExecutor()
+    """Return the process-wide command executor (shared by API + agent tools).
+
+    The backend is selected from ``BERU_COMMAND_EXECUTOR``:
+
+    * ``"host"`` (default) — local subprocess with the allowlist +
+      pattern-blocklist guardrail. Honours the optional
+      ``BERU_COMMAND_RUN_USER`` / ``BERU_COMMAND_RUN_GROUP`` (POSIX only;
+      Windows refuses this with a ``BLOCKED`` result and requires the
+      container backend).
+    * ``"container"`` — wraps the guardrail around ``docker exec`` into the
+      name given by ``BERU_COMMAND_CONTAINER``.
+    """
+    settings = get_settings()
+    if settings.command_executor == "container":
+        container = settings.command_container.strip()
+        if not container:
+            logger.warning(
+                "BERU_COMMAND_EXECUTOR=container but BERU_COMMAND_CONTAINER is "
+                "empty; using the host executor."
+            )
+        else:
+            from backend.engines.container import ContainerCommandExecutor
+
+            return ContainerCommandExecutor(container=container)
+    return CommandExecutor(
+        user=settings.command_run_user or None,
+        group=settings.command_run_group or None,
+    )

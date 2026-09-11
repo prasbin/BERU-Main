@@ -1,0 +1,1 @@
+"""Plugin system: entry-point based discovery of tools, agents, and providers."""

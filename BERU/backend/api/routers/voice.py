@@ -181,12 +181,13 @@ async def get_audio(audio_id: str) -> Response:
             continue
         for clip in session.clips:
             if clip.id == audio_id:
+                extension = clip.format if clip.format != "wav" else "wav"
                 return Response(
                     content=clip.audio,
-                    media_type="audio/wav",
+                    media_type=f"audio/{clip.format}",
                     headers={
                         "Content-Disposition": (
-                            f'attachment; filename="{audio_id}.wav"'
+                            f'attachment; filename="{audio_id}.{extension}"'
                         )
                     },
                 )

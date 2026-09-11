@@ -36,6 +36,9 @@ logs/
 htmlcov/
 .cache/
 
+# ---- Embedded PostgreSQL harness (scripts/test_postgres.py) ----
+.pgtest/
+
 # ---- Tooling ----
 .ruff_cache/
 .mypy_cache/

@@ -1,7 +1,8 @@
 # Backup & restore
 
 BERU stores **everything** in a single SQLite database file (default
-`./beru.db` — see `DATABASE_URL`). That includes:
+`./beru.db` — see `DATABASE_URL`) when running on its default backend. That
+includes:
 
 | Area | Tables |
 |---|---|
@@ -10,6 +11,10 @@ BERU stores **everything** in a single SQLite database file (default
 | Proactive engine | `scheduled_tasks`, `task_runs`, `monitor_triggers`, `trigger_fires` |
 | Notifications | `notifications` |
 | Reliability ledger | `activity_records`, `audit_records` |
+
+The same service backs up a PostgreSQL backend too (via `pg_dump`); the CLI
+below works identically, only the URL/backend differs. The rest of this page
+describes the SQLite path.
 
 Because the whole durable state is one file, **a single snapshot of that file is
 a complete backup** — there is nothing else to mirror (no secondary store).
@@ -101,9 +106,10 @@ Restoring is a file copy of a snapshot back over the live database path:
 
 ## Scope & limitations
 
-- **SQLite only.** The helpers raise `ValueError` for Postgres/MySQL URLs and
-  for `:memory:` databases. The app's default and documented deployment is
-  SQLite (`sqlite+aiosqlite:///./beru.db`).
+- **SQLite & PostgreSQL.** On SQLite the helpers use the online backup API; on
+  PostgreSQL they use native `pg_dump` / `pg_restore`, verified by a `pg_dump`
+  check of the restored database. The helpers still raise `ValueError` for
+  unsupported URLs (MySQL, `:memory:`).
 - Backups capture **durable database state only**. In-memory state (the
   reliability ledger's live counters, the session-token store) is rebuilt on
   restart; nothing in those is needed to restore a working system.

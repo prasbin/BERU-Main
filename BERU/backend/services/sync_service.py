@@ -40,6 +40,22 @@ def _from_micros(micros: int) -> datetime:
     return _EPOCH + timedelta(microseconds=micros)
 
 
+def _cursor_param(session: AsyncSession, micros: int) -> datetime:
+    """Cursor as a datetime bound to ``Message.created_at`` on this backend.
+
+    SQLite stores ``DateTime(timezone=True)`` as a naive-UTC string, so the
+    bound parameter stays naive there to keep string comparison correct.
+    Postgres stores ``timestamptz``, whose drivers (asyncpg) reject naive
+    datetimes, so the parameter is made tz-aware UTC.
+    """
+    dt = _from_micros(micros)
+    bind = getattr(session, "bind", None)
+    named = getattr(bind, "dialect", None)
+    if named is not None and named.name == "sqlite":
+        return dt
+    return dt.replace(tzinfo=timezone.utc)
+
+
 def message_to_dict(message: Message) -> dict:
     """Serialize a message for the phone payload."""
     return {
@@ -90,7 +106,7 @@ class SyncService:
         ordered newest-first so the newest appear in the limit first.
         """
         device = self._require_device(device_id)
-        since = _from_micros(device.cursor) if device.cursor else _EPOCH
+        since = _cursor_param(session, device.cursor if device.cursor else 0)
 
         stmt = (
             select(Message)

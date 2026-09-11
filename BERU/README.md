@@ -272,6 +272,11 @@ commented list. Key variables:
 | `BERU_MAX_TOOL_ITERATIONS` | `10`                  | Max tool-call iterations per request.                |
 | `BERU_API_KEY`    | *(empty)*                        | Single-user API key; blank disables auth (localhost).|
 | `BERU_VOICE_STT_PROVIDER` / `BERU_VOICE_TTS_PROVIDER` | `mock` | Voice STT/TTS provider behind the abstraction. |
+| `BERU_VOICE_STT_MODEL` | `base` | Whisper model for `BERU_VOICE_STT_PROVIDER=whisper` (voice extra). |
+| `BERU_VOICE_TTS_VOICE` | `en-US-JennyNeural` | Edge voice for `BERU_VOICE_TTS_PROVIDER=edge_tts` (voice extra). |
+| `BERU_COMMAND_EXECUTOR` | `host` | `host` runs tool commands directly; `container` sandboxes them via `docker exec`. |
+| `BERU_COMMAND_CONTAINER` | *(empty)* | Container (image or name) for the `container` executor. |
+| `BERU_COMMAND_RUN_USER` / `BERU_COMMAND_RUN_GROUP` | *(empty)* | Least-privilege account for host subprocesses (POSIX). |
 | `LOG_LEVEL` / `LOG_FORMAT` | `INFO` / `text`         | Logging verbosity and `text`/`json` output.          |
 | `CORS_ORIGINS`    | `*`                              | Comma-separated allowed origins.                     |
 

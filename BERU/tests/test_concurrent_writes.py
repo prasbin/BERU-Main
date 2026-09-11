@@ -17,7 +17,7 @@ import asyncio
 from sqlalchemy import event, func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from backend.database.base import Base, _set_sqlite_pragmas
+from backend.database.base import _set_sqlite_pragmas
 from backend.engines.scheduler import ScheduledTask
 from backend.services.activity_ledger import (
     ActivityEntry,
@@ -29,7 +29,15 @@ from backend.services.activity_ledger import (
 
 
 def _concurrent_engine(db_path):
-    """An engine with the same pragma hardening the app engine gets."""
+    """An engine with the same hardening the app engine gets.
+
+    SQLite gets the PRAGMA hardening (WAL + busy_timeout + FK enforcement);
+    a Postgres run simply uses the configured test database.
+    """
+    import tests.db as testdb
+
+    if testdb.is_postgres():
+        return testdb.make_test_engine(db_path)
     engine = create_async_engine(
         f"sqlite+aiosqlite:///{db_path}", connect_args={"check_same_thread": False}
     )
@@ -38,8 +46,9 @@ def _concurrent_engine(db_path):
 
 
 async def _schema(engine):
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    import tests.db as testdb
+
+    await testdb.prepare_schema(engine)
 
 
 async def _one_run(maker, task_id: str):

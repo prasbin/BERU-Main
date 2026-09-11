@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, String, UniqueConstraint
+from sqlalchemy import ForeignKey, Index, String, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.database.base import Base
@@ -22,13 +22,21 @@ if TYPE_CHECKING:
 class Project(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "projects"
     __table_args__ = (
-        # Project names are unique per user (NULL user_id rows — legacy/owner
-        # projects in single-user mode — are distinct under SQLite's NULL
-        # handling, so different owners can share names without colliding).
+        # Project names are unique per user (scoped rows).
         UniqueConstraint("user_id", "name", name="uq_projects_user_name"),
+        # SQLite and Postgres treat NULLs as distinct in UNIQUE constraints, so
+        # system/owner rows (user_id IS NULL) would otherwise lose the legacy
+        # global name uniqueness. A partial unique index preserves it.
+        Index(
+            "uq_projects_system_name",
+            "name",
+            unique=True,
+            sqlite_where=text("user_id IS NULL"),
+            postgresql_where=text("user_id IS NULL"),
+        ),
     )
 
-    # Unique within a user's scope, enforced by the table constraint above.
+    # Unique within a user's scope (or globally for system rows).
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     # Owning user (NULL = system/owner rows in the single-user legacy mode).

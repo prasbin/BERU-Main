@@ -1,8 +1,10 @@
-"""SQLite-backed vector store for semantic recall.
+"""Vector store for semantic recall.
 
-Stores text embeddings as JSON-serialised lists in SQLite and performs
-cosine similarity search in pure Python (no numpy dependency). Suitable for
-small-to-medium collections; swap in a proper vector database at scale.
+Stores text embeddings as JSON-serialised lists and performs cosine similarity
+search in pure Python (no numpy dependency). Suitable for small-to-medium
+collections; swap in a proper vector database at scale. Backend-agnostic:
+SQLite and Postgres are both supported (the upsert uses each dialect's native
+``INSERT ... ON CONFLICT`` form).
 """
 
 from __future__ import annotations
@@ -10,8 +12,10 @@ from __future__ import annotations
 import json
 import math
 from dataclasses import dataclass
+from typing import Any
 
 from sqlalchemy import Column, Integer, String, Text, UniqueConstraint
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -59,21 +63,36 @@ class VectorStore:
         text: str,
         vector: list[float],
     ) -> None:
-        stmt = sqlite_insert(EmbeddingRow).values(
-            source_table=source_table,
-            source_id=source_id,
-            text=text,
-            vector_json=json.dumps(vector),
-            dimension=len(vector),
-        )
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["source_table", "source_id"],
-            set_={
-                "text": stmt.excluded.text,
-                "vector_json": stmt.excluded.vector_json,
-                "dimension": stmt.excluded.dimension,
-            },
-        )
+        values: dict[str, Any] = {
+            "source_table": source_table,
+            "source_id": source_id,
+            "text": text,
+            "vector_json": json.dumps(vector),
+            "dimension": len(vector),
+        }
+        dialect = session.bind.dialect.name if session.bind is not None else "postgresql"
+        if dialect == "sqlite":
+            stmt = sqlite_insert(EmbeddingRow).values(**values)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["source_table", "source_id"],
+                set_={
+                    "text": stmt.excluded.text,
+                    "vector_json": stmt.excluded.vector_json,
+                    "dimension": stmt.excluded.dimension,
+                },
+            )
+        else:
+            # Postgres (and other SQL dialects): ON CONFLICT on the composite
+            # unique key declared by the model.
+            stmt = pg_insert(EmbeddingRow).values(**values)
+            stmt = stmt.on_conflict_do_update(
+                constraint="uq_embeddings_source_entity",
+                set_={
+                    "text": stmt.excluded.text,
+                    "vector_json": stmt.excluded.vector_json,
+                    "dimension": stmt.excluded.dimension,
+                },
+            )
         await session.execute(stmt)
 
     async def search(

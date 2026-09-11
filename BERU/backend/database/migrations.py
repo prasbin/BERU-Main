@@ -59,6 +59,21 @@ def to_sync_url(url: str) -> str:
     return url
 
 
+def to_plain_uri(url: str) -> str:
+    """Return the plain libpq connection URI for a SQLAlchemy Postgres URL.
+
+    psycopg2 ``connect()`` and the ``pg_dump``/``pg_restore`` tools do not
+    understand SQLAlchemy's driver-qualified scheme (``postgresql+asyncpg`` /
+    ``postgresql+psycopg2``), so this strips the ``+<driver>`` suffix back to
+    ``postgresql://``. Non-driver-qualified URLs pass through unchanged.
+    """
+    scheme, separator, rest = url.partition("://")
+    if separator and "+" in scheme:
+        core = scheme.split("+", 1)[0] or scheme
+        return f"{core}://{rest}"
+    return url
+
+
 def make_alembic_config(url: str | None = None) -> Config:
     """Build an Alembic ``Config`` pointed at BERU's ``migrations/`` directory.
 

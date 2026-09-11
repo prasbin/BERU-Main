@@ -64,7 +64,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # stay signed in across restarts.
         from backend.services.user_service import ensure_owner
 
-        async with get_sessionmaker() as bootstrap_session:
+        async with get_sessionmaker()() as bootstrap_session:
             await ensure_owner(bootstrap_session)
         from backend.api.security import restore_sessions
 

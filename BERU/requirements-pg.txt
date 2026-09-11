@@ -1,0 +1,10 @@
+# Optional PostgreSQL test dependencies.
+# Install with:  pip install -r requirements-pg.txt
+# (includes everything in requirements.txt)
+
+-r requirements.txt
+
+# Embedded PostgreSQL for the hermetic PG test run (scripts/test_postgres.py
+# and `python -m scripts.release check --postgres`). Requires a working
+# local PostgreSQL install that the package can drive; see its README.
+pgserver>=0.1.4

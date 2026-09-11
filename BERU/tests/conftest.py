@@ -10,11 +10,11 @@ from __future__ import annotations
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.agents.registry import get_agent_registry
 from backend.core.config import get_settings
-from backend.database.base import Base, get_engine, get_session
+from backend.database.base import get_engine, get_session
 from backend.engines.intelligence import get_intelligence_engine
 from backend.engines.llm.registry import reset_llm_provider
 from backend.main import create_app
@@ -49,6 +49,9 @@ def _force_mock_provider(monkeypatch):
     from backend.api.security import reset_session_store
 
     reset_session_store()
+    from backend.api.rate_limit import reset_rate_limiters
+
+    reset_rate_limiters()
     from backend.services.observability import reset_request_metrics
 
     reset_request_metrics()
@@ -56,16 +59,16 @@ def _force_mock_provider(monkeypatch):
 
 @pytest_asyncio.fixture
 async def _engine(tmp_path):
-    """A temp SQLite database with the full schema; yield its async engine."""
-    import backend.models  # noqa: F401  (register models on Base.metadata)
+    """A fresh database with the full schema; yield its async engine.
 
-    db_path = tmp_path / "test.db"
-    engine = create_async_engine(
-        f"sqlite+aiosqlite:///{db_path}",
-        connect_args={"check_same_thread": False},
-    )
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    By default a throwaway SQLite file; when ``BERU_TEST_DATABASE_URL`` is set
+    the suite runs against that Postgres database instead (schema dropped and
+    recreated per test, see ``tests/db.py``).
+    """
+    import tests.db as testdb
+
+    engine = testdb.make_test_engine(tmp_path)
+    await testdb.prepare_schema(engine)
     yield engine
     await engine.dispose()
 

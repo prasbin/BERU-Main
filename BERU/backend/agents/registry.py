@@ -15,6 +15,8 @@ from backend.agents.dhanus_agent import DhanusAgent
 from backend.agents.igris_agent import IgrisAgent
 from backend.agents.tank_agent import TankAgent
 from backend.core.errors import NotFoundError
+from backend.core.logging import get_logger
+from backend.plugins import discovery
 from backend.tools.browser import (
     BrowserBackTool,
     BrowserBlockTool,
@@ -85,6 +87,36 @@ from backend.tools.voice import VoiceListenTool, VoiceSpeakTool
 from backend.tools.web import WebSearchTool
 
 DEFAULT_AGENT_NAME = "beru_core"
+
+logger = get_logger(__name__)
+
+
+def _register_plugins(registry: AgentRegistry) -> None:
+    """Register plugin agents advertised via the ``beru.agents`` entry points."""
+    for name, factory in discovery.load_entry_point_factories(
+        discovery.GROUP_AGENTS
+    ).items():
+        try:
+            agent = factory()
+        except Exception as exc:  # noqa: BLE001 - a broken plugin must not block startup
+            logger.warning("Skipping plugin agent '%s' (factory failed): %s", name, exc)
+            continue
+        if not isinstance(agent, BaseAgent):
+            logger.warning(
+                "Skipping plugin agent '%s': entry point did not yield a BaseAgent (got %s).",
+                name,
+                type(agent).__name__,
+            )
+            continue
+        try:
+            registry.register(agent)
+        except ValueError:
+            logger.warning(
+                "Skipping plugin agent '%s': an agent named '%s' is already registered.",
+                name,
+                agent.name,
+            )
+    return None
 
 
 class AgentRegistry:
@@ -200,4 +232,5 @@ def get_agent_registry() -> AgentRegistry:
     """Return the process-wide agent registry, seeded with built-in agents."""
     registry = AgentRegistry()
     _seed_registry(registry)
+    _register_plugins(registry)
     return registry

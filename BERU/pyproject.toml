@@ -1,10 +1,62 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "beru"
 version = "0.1.0"
 description = "BERU — a modular personal AI operating system / agent backend."
 requires-python = ">=3.10"
-# NOTE: runtime dependencies are managed in requirements.txt (source of truth).
-# This section documents metadata only; installs use the requirements files.
+# Runtime dependencies mirror requirements.txt (the source of truth for
+# installs). Declaring them here lets `pip install .` and wheel installs
+# resolve the full dependency tree from package metadata.
+
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "SQLAlchemy>=2.0.29",
+    "aiosqlite>=0.19",
+    "alembic>=1.13",
+    "httpx>=0.27",
+    # PostgreSQL support (Stage 5.2): async driver for the app engine, plus
+    # the synchronous driver Alembic uses when migrating a Postgres database.
+    "asyncpg>=0.27",
+    "psycopg2-binary>=2.9",
+    # Desktop control (screenshot, mouse, keyboard).
+    "pyautogui>=0.9.50",
+    "mss>=9.0",
+    "Pillow>=10.0",
+    "pyperclip>=1.8",
+    "psutil>=5.9",
+    # Browser automation (real page control). Optional at runtime — without
+    # Playwright the browser engine reports "unavailable" instead of failing.
+    "playwright>=1.40",
+]
+
+[project.optional-dependencies]
+# Real voice plugins (Stage 5.3): install with `pip install -e .[voice]` or
+# `pip install beru[voice]`. Both are first-party providers discovered through
+# entry points; without them BERU keeps the hermetic mock voice providers.
+voice = [
+    "openai-whisper>=20231117",
+    "edge-tts>=6.1",
+]
+
+[project.entry-points."beru.stt_providers"]
+whisper = "backend.engines.speech.whisper:build_whisper_stt"
+
+[project.entry-points."beru.tts_providers"]
+edge_tts = "backend.engines.speech.edge_tts:build_edge_tts"
+
+[tool.setuptools.packages.find]
+include = ["backend*", "migrations*"]
+
+[tool.setuptools.package-data]
+# Alembic needs the script template plus every revision in `versions/` to run
+# migrations from an installed wheel (see backend/database/migrations.py).
+migrations = ["script.py.mako", "versions/*.py"]
 
 [tool.pytest.ini_options]
 # asyncio_mode = auto lets async test functions run without an explicit marker.

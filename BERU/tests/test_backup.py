@@ -16,6 +16,7 @@ from backend.services.backup import (
     verify_backup,
     verify_db,
 )
+from tests.db import RUNNING_ON_POSTGRES
 
 
 def _seed(path, tables=("conversations", "activity_records"), rows=3):
@@ -82,6 +83,11 @@ def test_backup_default_target_is_timestamped_sibling(tmp_path):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    RUNNING_ON_POSTGRES,
+    reason="live-schema round trip is SQLite-file-only; the PG round trip is "
+    "covered in tests/test_postgres.py",
+)
 async def test_backup_round_trips_live_schema_and_rows(_engine, db_session):
     """The app's own async WAL schema + a row snapshot cleanly via the sync API."""
     conv = Conversation(title="backup me", agent="beru_core")

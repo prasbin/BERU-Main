@@ -261,7 +261,8 @@ class VoiceEngine:
         session.state = VoiceState.SPEAKING
         session.last_activity = datetime.now(timezone.utc)
         audio = await self._tts.synthesize(text, duration_ms=100)
-        clip = new_clip(text, audio, self._spec)
+        audio_format = getattr(self._tts, "format", "wav")
+        clip = new_clip(text, audio, self._spec, format=audio_format)
         if session.state != VoiceState.SPEAKING:
             clip.interrupted = True
         session.clips.append(clip)

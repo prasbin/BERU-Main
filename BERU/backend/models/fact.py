@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import ForeignKey, Index, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.database.base import Base
@@ -24,13 +24,23 @@ if TYPE_CHECKING:
 class Fact(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "facts"
     __table_args__ = (
-        # Fact keys are unique per user (NULL user_id rows — legacy/owner facts
-        # in single-user mode — are all distinct under SQLite's NULL handling,
-        # so distinct owners can share keys without colliding).
+        # Fact keys are unique per user (scoped rows).
         UniqueConstraint("user_id", "key", name="uq_facts_user_key"),
+        # SQLite and Postgres treat NULLs as distinct in UNIQUE constraints, so
+        # system/owner rows (user_id IS NULL) would otherwise lose the legacy
+        # global key uniqueness. A partial unique index preserves it exactly
+        # for that class of rows on both databases.
+        Index(
+            "uq_facts_system_key",
+            "key",
+            unique=True,
+            sqlite_where=text("user_id IS NULL"),
+            postgresql_where=text("user_id IS NULL"),
+        ),
     )
 
-    # Unique within a user's scope, enforced by the table constraint above.
+    # Unique within a user's scope (or globally for system rows), enforced by
+    # the constraints above.
     key: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     value: Mapped[str] = mapped_column(Text, nullable=False)
     category: Mapped[str] = mapped_column(

@@ -48,6 +48,7 @@ from backend.services.activity_ledger import (
     get_activity_ledger,
 )
 from backend.tools.base import Tool, ToolResult, serialize_tool_result
+from backend.tools.credentials import scope_for_tool
 from backend.tools.policy import PermissionPolicy, default_policy
 
 logger = logging.getLogger(__name__)
@@ -213,6 +214,7 @@ class BaseAgent:
         *,
         confirm: bool = False,
         agent_name: str = "",
+        settings: Settings | None = None,
     ) -> ToolResult:
         """Resolve, permission-check, and execute a tool call.
 
@@ -220,6 +222,10 @@ class BaseAgent:
         failure. Confirmation-gated tools are only executed when ``confirm`` is
         True; otherwise a ``confirmation_required`` result is returned and the
         intended call is *not* run.
+
+        When ``settings`` is provided, the tool's scoped credentials view is
+        injected (see :func:`backend.tools.credentials.scope_for_tool`) so the
+        tool only ever sees the provider keys it declared.
         """
         tool = self._tools.get(tool_call.name)
         if tool is None:
@@ -265,6 +271,10 @@ class BaseAgent:
                 agent_name, tool_call.name, args, "failure", None, message
             )
             return ToolResult.failure(message)
+
+        # Inject the tool's scoped credentials before executing, so a tool
+        # accesses only the provider keys it declared — never the global key.
+        tool.credentials = scope_for_tool(settings, tool.required_credentials)
 
         started = time.perf_counter()
         try:
@@ -315,10 +325,17 @@ class BaseAgent:
             logger.debug("Could not record activity", exc_info=True)
 
     async def _execute_tool(
-        self, tool_call: ToolCall, *, agent_name: str = "", confirm: bool = False
+        self,
+        tool_call: ToolCall,
+        *,
+        agent_name: str = "",
+        confirm: bool = False,
+        settings: Settings | None = None,
     ) -> str:
         """Execute a tool call and return its outcome as a feedable JSON string."""
-        result = await self.run_tool(tool_call, confirm=confirm, agent_name=agent_name)
+        result = await self.run_tool(
+            tool_call, confirm=confirm, agent_name=agent_name, settings=settings
+        )
         return serialize_tool_result(result, tool_name=tool_call.name)
 
     def _pending_from(self, tool_call: ToolCall, result_text: str) -> PendingConfirmation | None:
@@ -393,7 +410,9 @@ class BaseAgent:
             # Execute each tool call and append results.
             for tc in response.tool_calls:
                 tool_calls_made += 1
-                result_text = await self._execute_tool(tc, agent_name=self.name)
+                result_text = await self._execute_tool(
+                    tc, agent_name=self.name, settings=request.settings
+                )
                 messages.append(
                     LLMMessage(
                         role="tool",
@@ -479,7 +498,9 @@ class BaseAgent:
             )
             for tc in tool_calls:
                 tool_calls_made += 1
-                result_text = await self._execute_tool(tc, agent_name=self.name)
+                result_text = await self._execute_tool(
+                    tc, agent_name=self.name, settings=request.settings
+                )
                 messages.append(
                     LLMMessage(
                         role="tool",
