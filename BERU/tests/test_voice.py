@@ -264,24 +264,81 @@ async def test_engine_status():
 # ---- Tools ----
 
 
-async def test_voice_listen_tool_unavailable():
+async def test_voice_listen_tool_honest_with_mock_stt():
+    """With the simulated STT provider, the tool must not claim transcription."""
     from backend.tools.voice import VoiceListenTool
 
-    tool = VoiceListenTool()
+    engine = VoiceEngine(stt=MockSTTProvider(), tts=MockTTSProvider())
+    tool = VoiceListenTool(engine=engine)
     result = await tool.run(session_id="abc")
     assert result.ok is False
-    assert "unavailable" in result.error
+    assert "mock" in result.error.lower()
     assert tool.requires_confirmation is False
 
 
-async def test_voice_speak_tool_unavailable():
+async def test_voice_listen_tool_unknown_session():
+    from backend.tools.voice import VoiceListenTool
+
+    class RealSTT:
+        async def transcribe(self, audio: bytes) -> str:
+            return ""
+
+    engine = VoiceEngine(stt=RealSTT(), tts=MockTTSProvider())
+    tool = VoiceListenTool(engine=engine)
+    result = await tool.run(session_id="no-such-session")
+    assert result.ok is False
+    assert "unknown voice session" in result.error.lower()
+
+
+async def test_voice_listen_tool_transcribes_buffered_audio():
+    from backend.tools.voice import VoiceListenTool
+
+    class RealSTT:
+        def __init__(self):
+            self.calls = []
+
+        async def transcribe(self, audio: bytes) -> str:
+            self.calls.append(audio)
+            return "open the calendar"
+
+    engine = VoiceEngine(stt=RealSTT(), tts=MockTTSProvider())
+    session = await engine.create_session()
+    await engine.ingest_audio(session.session_id, encode_silence(200))
+    tool = VoiceListenTool(engine=engine)
+    result = await tool.run(session_id=session.session_id)
+    assert result.ok is True
+    assert result.output["text"] == "open the calendar"
+    assert not result.output["was_wake"]
+
+
+async def test_voice_speak_tool_honest_with_mock_tts():
+    """With the simulated TTS provider, the tool must not claim speech."""
     from backend.tools.voice import VoiceSpeakTool
 
-    tool = VoiceSpeakTool()
+    engine = VoiceEngine(stt=MockSTTProvider(), tts=MockTTSProvider())
+    tool = VoiceSpeakTool(engine=engine)
     result = await tool.run(text="hello")
     assert result.ok is False
-    assert "unavailable" in result.error
+    assert "mock" in result.error.lower()
     assert tool.requires_confirmation is True
+
+
+async def test_voice_speak_tool_synthesizes_real_clip():
+    from backend.tools.voice import VoiceSpeakTool
+
+    class RealTTS:
+        format = "wav"
+
+        async def synthesize(self, text: str, **kwargs: object) -> bytes:
+            return encode_silence(300)
+
+    engine = VoiceEngine(stt=MockSTTProvider(), tts=RealTTS())
+    tool = VoiceSpeakTool(engine=engine)
+    result = await tool.run(text="hello there")
+    assert result.ok is True
+    assert result.output["text"] == "hello there"
+    assert result.output["format"] == "wav"
+    assert result.output["id"]
 
 
 async def test_core_agent_has_voice_tools():

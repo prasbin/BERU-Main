@@ -1,4 +1,9 @@
-"""Tests for the specialist agents: IGRIS, DHANUS, TANK."""
+"""Tests for the specialist agents: IGRIS, DHANUS, TANK.
+
+The behavioural tests for study, spiritual, and coding tools exercise the tool
+layer directly against injected tmp_path stores so the suite stays hermetic
+— no files are written to the project data directory during testing.
+"""
 
 from __future__ import annotations
 
@@ -12,6 +17,9 @@ from backend.engines.llm.base import (
     LLMResponse,
     ToolCall,
 )
+from backend.tools.coding import CodeFormatterTool
+from backend.tools.spiritual import LookupScriptureTool, MeditationTimerTool
+from backend.tools.study import CreateFlashcardTool, SearchKnowledgeTool
 
 # ---- Mock providers ----
 
@@ -94,37 +102,50 @@ async def test_igris_has_tools():
     assert "create_flashcard" in tool_names
 
 
-async def test_igris_search_knowledge():
-    """Unconfigured study backend reports itself honestly rather than fabricating results."""
-    registry = get_agent_registry()
-    igris = registry.get("igris")
-    tc = ToolCall(id="c1", name="search_knowledge", arguments='{"query": "quantum physics"}')
-    result_text = await igris._execute_tool(tc, agent_name="igris")
-    result = json.loads(result_text)
-
-    assert "error" in result
-    assert "unavailable" in result["error"]
-    assert "no study knowledge base backend" in result["error"]
+async def test_igris_search_knowledge_empty_store(tmp_path):
+    tool = SearchKnowledgeTool(store_path=tmp_path / "knowledge.json")
+    result = await tool.run(query="quantum physics")
+    assert result.ok is True
+    assert result.output["match_count"] == 0
+    assert result.output["query"] == "quantum physics"
 
 
-async def test_igris_create_flashcard():
-    """The flashcard backend is not implemented: the tool must not fake a card."""
-    registry = get_agent_registry()
-    igris = registry.get("igris")
-    tc = ToolCall(
-        id="c1",
-        name="create_flashcard",
-        arguments='{"front": "What is NP?", "back": "Nondeterministic Polynomial time"}',
+async def test_igris_search_knowledge_finds_match(tmp_path):
+    store = tmp_path / "knowledge.json"
+    store.write_text(json.dumps({
+        "notes": [
+            {
+                "id": "n1",
+                "text": "Photosynthesis is the light-dependent reaction.",
+                "tags": ["biology"],
+            },
+            {"id": "n2", "text": "Thermodynamics describes entropy.", "tags": ["physics"]},
+        ]
+    }))
+    tool = SearchKnowledgeTool(store_path=store)
+    result = await tool.run(query="entropy")
+    assert result.ok is True
+    assert result.output["match_count"] == 1
+    assert result.output["matches"][0]["id"] == "n2"
+
+
+async def test_igris_create_flashcard(tmp_path):
+    tool = CreateFlashcardTool(store_path=tmp_path / "cards.json")
+    result = await tool.run(
+        front="What is NP?",
+        back="Nondeterministic Polynomial time",
+        tags=["cs"],
     )
-    result_text = await igris._execute_tool(tc, agent_name="igris")
-    result = json.loads(result_text)
-
-    assert "error" in result
-    assert "unavailable" in result["error"]
-    assert "flashcard storage backend" in result["error"]
+    assert result.ok is True
+    card = result.output["card"]
+    assert len(card["id"]) == 12
+    assert card["front"] == "What is NP?"
+    assert result.output["flashcard_created"] is True
+    assert result.output["card_count"] == 1
 
 
 async def test_igris_tool_call_loop():
+    """The agent loop can still call search_knowledge through the LLM."""
     registry = get_agent_registry()
     igris = registry.get("igris")
     tool = igris._tools.get("search_knowledge")
@@ -162,38 +183,40 @@ async def test_dhanus_has_tools():
     assert "meditation_timer" in tool_names
 
 
-async def test_dhanus_lookup_scripture():
-    """The scripture backend is not configured: the tool must not invent a passage."""
-    registry = get_agent_registry()
-    dhanus = registry.get("dhanus")
-    tc = ToolCall(
-        id="c1",
-        name="lookup_scripture",
-        arguments='{"tradition": "vedantic", "topic": "self"}',
-    )
-    result_text = await dhanus._execute_tool(tc, agent_name="dhanus")
-    result = json.loads(result_text)
+async def test_dhanus_lookup_scripture_real_corpus(tmp_path):
+    corpus_dir = tmp_path / "scripture"
+    corpus_dir.mkdir()
+    (corpus_dir / "vedantic.json").write_text(json.dumps({
+        "tradition": "vedantic",
+        "passages": [
+            {
+                "reference": "Bhagavad Gita 2.47",
+                "text": "You have the right to action alone.",
+                "topics": ["action", "duty"],
+            }
+        ]
+    }))
+    tool = LookupScriptureTool(corpus_dir=corpus_dir)
+    result = await tool.run(tradition="vedantic", topic="action")
+    assert result.ok is True
+    assert result.output["match_count"] == 1
+    assert "Bhagavad Gita" in result.output["matches"][0]["reference"]
 
-    assert "error" in result
-    assert "unavailable" in result["error"]
-    assert "scripture" in result["error"]
+
+async def test_dhanus_lookup_scripture_missing_corpus(tmp_path):
+    tool = LookupScriptureTool(corpus_dir=tmp_path / "corpus")
+    result = await tool.run(tradition="vedantic", topic="self")
+    assert result.ok is False
+    assert "no scripture corpus" in result.error.lower()
 
 
-async def test_dhanus_meditation_timer():
-    """No timer backend exists: the tool must not claim a timer was started."""
-    registry = get_agent_registry()
-    dhanus = registry.get("dhanus")
-    tc = ToolCall(
-        id="c1",
-        name="meditation_timer",
-        arguments='{"duration_minutes": 15, "technique": "breathing"}',
-    )
-    result_text = await dhanus._execute_tool(tc, agent_name="dhanus")
-    result = json.loads(result_text)
-
-    assert "error" in result
-    assert "unavailable" in result["error"]
-    assert "timer backend" in result["error"]
+async def test_dhanus_meditation_timer(tmp_path):
+    tool = MeditationTimerTool(store_path=tmp_path / "med.json")
+    result = await tool.run(duration_minutes=10, technique="breathing")
+    assert result.ok is True
+    assert result.output["status"] == "running"
+    assert result.output["duration_minutes"] == 10
+    assert result.output["ends_at"]
 
 
 # ---- TANK agent tests ----
@@ -232,25 +255,23 @@ async def test_tank_code_analyser():
     assert result["result"]["language"] == "python"
     assert result["result"]["line_count"] == 1
     assert result["result"]["note"].startswith("Heuristic analysis only")
-    # No fabricated per-file advice: the tool is honest about what it computed.
     assert "suggestions" not in result["result"]
 
 
-async def test_tank_code_formatter():
-    """No formatter backend exists: the tool must not claim formatting happened."""
-    registry = get_agent_registry()
-    tank = registry.get("tank")
-    tc = ToolCall(
-        id="c1",
-        name="code_formatter",
-        arguments='{"code": "x=1", "language": "python"}',
-    )
-    result_text = await tank._execute_tool(tc, agent_name="tank")
-    result = json.loads(result_text)
+async def test_tank_code_formatter_real_ruff():
+    """When ruff is installed, the formatter actually runs."""
+    tool = CodeFormatterTool()
+    result = await tool.run(code="x  =  1\n", language="python")
+    assert result.ok is True
+    assert result.output["formatted_code"] == "x = 1\n"
+    assert result.output["changed"] is True
 
-    assert "error" in result
-    assert "unavailable" in result["error"]
-    assert "formatter backend" in result["error"]
+
+async def test_tank_code_formatter_unknown_language():
+    tool = CodeFormatterTool()
+    result = await tool.run(code="var x=1;", language="javascript")
+    assert result.ok is False
+    assert "no formatter" in result.error.lower()
 
 
 # ---- Cross-agent isolation tests ----
@@ -261,7 +282,6 @@ async def test_igris_cannot_use_tank_tools():
     registry = get_agent_registry()
     igris = registry.get("igris")
     tool_names = [t.name for t in igris._tools.values()]
-
     assert "code_analyser" not in tool_names
     assert "code_formatter" not in tool_names
 
@@ -271,7 +291,6 @@ async def test_tank_cannot_use_igris_tools():
     registry = get_agent_registry()
     tank = registry.get("tank")
     tool_names = [t.name for t in tank._tools.values()]
-
     assert "search_knowledge" not in tool_names
     assert "create_flashcard" not in tool_names
 
@@ -281,5 +300,4 @@ async def test_dhanus_cannot_use_core_tools():
     registry = get_agent_registry()
     dhanus = registry.get("dhanus")
     tool_names = [t.name for t in dhanus._tools.values()]
-
     assert "clock" not in tool_names

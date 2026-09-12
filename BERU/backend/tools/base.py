@@ -113,6 +113,12 @@ class Tool(ABC):
     #: Defaults to an empty scope; tools read via ``self.credentials.get(...)``.
     credentials: Any = None  # ScopedCredentials — typed loosely to avoid circular import
 
+    #: Settings view injected by the agent before each run (parallel to
+    #: ``credentials``). Tools that need to resolve providers from the same
+    #: configuration the agent used should read ``self.settings`` and only fall
+    #: back to :func:`backend.core.config.get_settings` when it is ``None``.
+    settings: Any = None  # Settings — typed loosely to avoid circular import
+
     @abstractmethod
     async def run(self, **kwargs: Any) -> ToolResult:
         """Execute the tool with validated keyword arguments."""

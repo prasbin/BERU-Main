@@ -99,7 +99,7 @@ async def test_tools_aggregates_across_agents(client):
     assert by_name["browser_clear_downloads"]["availability"] == "available"
     assert by_name["browser_clear_downloads"]["requires_confirmation"] is True
     assert by_name["browser_close"]["requires_confirmation"] is True
-    assert by_name["voice_speak"]["availability"] == "unavailable"
+    assert by_name["voice_speak"]["availability"] == "limited"
     assert by_name["voice_speak"]["requires_confirmation"] is True
 
 

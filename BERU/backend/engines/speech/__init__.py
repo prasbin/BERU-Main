@@ -204,12 +204,22 @@ def new_clip(
     )
 
 
+def _sapi_tts_factory(settings: Settings) -> TTSProvider:
+    """Build the Windows SAPI provider (imported lazily; Windows-only)."""
+    from backend.engines.speech.sapi import build_sapi_tts
+
+    return build_sapi_tts(settings)
+
+
 BUILTIN_STT_FACTORIES: dict[str, Callable[[Settings], STTProvider]] = {
     "mock": lambda settings: MockSTTProvider(),
 }
 
 BUILTIN_TTS_FACTORIES: dict[str, Callable[[Settings], TTSProvider]] = {
     "mock": lambda settings: MockTTSProvider(),
+    # First-party Windows TTS (SAPI). Built in so a source checkout works as-is on
+    # Windows; constructing it imports win32com and fails honestly where absent.
+    "sapi": _sapi_tts_factory,
 }
 
 

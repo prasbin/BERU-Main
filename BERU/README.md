@@ -271,6 +271,11 @@ commented list. Key variables:
 | `BERU_RATE_LIMIT_BURST` | `5`                       | Consecutive requests before the limiter kicks in.    |
 | `BERU_MAX_TOOL_ITERATIONS` | `10`                  | Max tool-call iterations per request.                |
 | `BERU_API_KEY`    | *(empty)*                        | Single-user API key; blank disables auth (localhost).|
+| `BERU_OWNER_USERNAME` | `owner`                     | First-run owner account username (multi-user auth).  |
+| `BERU_OWNER_PASSWORD` | *(empty)*                    | First-run owner password; random + logged when blank.|
+| `BERU_RATE_LIMIT_AUTH_RPM` | `10`                  | Max `/auth/login` attempts per minute per IP.        |
+| `BERU_RATE_LIMIT_AUTH_BURST` | `3`                 | Auth burst before the limiter activates.             |
+| `BERU_TRUST_PROXY_HEADERS` | `false`                  | Honor `X-Forwarded-For` for rate limiting (proxy only). |
 | `BERU_VOICE_STT_PROVIDER` / `BERU_VOICE_TTS_PROVIDER` | `mock` | Voice STT/TTS provider behind the abstraction. |
 | `BERU_VOICE_STT_MODEL` | `base` | Whisper model for `BERU_VOICE_STT_PROVIDER=whisper` (voice extra). |
 | `BERU_VOICE_TTS_VOICE` | `en-US-JennyNeural` | Edge voice for `BERU_VOICE_TTS_PROVIDER=edge_tts` (voice extra). |

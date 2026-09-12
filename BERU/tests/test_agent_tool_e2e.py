@@ -270,10 +270,10 @@ async def test_e2e_document_generator_receives_only_its_scoped_credential():
     assert "sk-e2e-emb" not in repr(tool.credentials)
     assert "sk-e2e-llm" not in repr(tool.credentials)
 
-    # The generation backend is not implemented, so even with the key the tool
-    # fails honestly rather than fabricating a document.
+    # The offline mock provider is not a real generation backend, so even with
+    # the key the tool fails honestly rather than fabricating a document.
     assert result.ok is False
-    assert "not implemented" in (result.error or "")
+    assert "mock" in (result.error or "").lower()
 
 
 async def test_e2e_document_generator_missing_key_fails_honestly():

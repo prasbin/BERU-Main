@@ -275,6 +275,9 @@ class BaseAgent:
         # Inject the tool's scoped credentials before executing, so a tool
         # accesses only the provider keys it declared — never the global key.
         tool.credentials = scope_for_tool(settings, tool.required_credentials)
+        # The agent-resolved settings are provided too, so tools that build
+        # providers resolve the exact configuration this request used.
+        tool.settings = settings
 
         started = time.perf_counter()
         try:

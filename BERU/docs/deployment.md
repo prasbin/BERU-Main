@@ -35,7 +35,9 @@ docker compose up -d postgres
 ```
 
 - Schema is managed by Alembic; migrations convert the async URL to the sync
-  driver (`psycopg2`) automatically (`python -m backend.database.migrations`).
+  driver (`psycopg2`) automatically. Migrations are applied automatically at
+  application startup (`backend.database.init_db`); to apply them manually from
+  the CLI run `alembic upgrade head`.
 - The instance lock (`backend/database/lock.py`) and the backup service
   (`backend/services/backup.py`) work against Postgres: backups use native
   `pg_dump`/`pg_restore`, and the lock uses PostgreSQL advisory locks.
