@@ -29,15 +29,9 @@ class SearchKnowledgeTool(Tool):
     }
 
     async def run(self, **kwargs: Any) -> ToolResult:
-        query = kwargs.get("query", "")
-        return ToolResult.success(
-            {
-                "query": query,
-                "results": [
-                    f"Study note matching '{query}' (stub — connect to real knowledge base)"
-                ],
-                "count": 1,
-            }
+        return ToolResult.failure(
+            "search_knowledge is unavailable: no study knowledge base backend "
+            "is configured, so no stored notes can be searched yet."
         )
 
 
@@ -69,14 +63,7 @@ class CreateFlashcardTool(Tool):
     }
 
     async def run(self, **kwargs: Any) -> ToolResult:
-        front = kwargs.get("front", "")
-        back = kwargs.get("back", "")
-        tags = kwargs.get("tags", [])
-        return ToolResult.success(
-            {
-                "flashcard_created": True,
-                "front": front,
-                "back": back,
-                "tags": tags,
-            }
+        return ToolResult.failure(
+            "create_flashcard is unavailable: the flashcard storage backend is "
+            "not implemented, so no flashcard can be created yet."
         )

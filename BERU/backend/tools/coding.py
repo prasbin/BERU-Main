@@ -11,13 +11,15 @@ from backend.tools.base import Tool, ToolResult
 
 
 class CodeAnalyzerTool(Tool):
-    """Analyse code for quality, complexity, and potential issues."""
+    """Analyse code for quality, complexity, and potential issues.
+
+    The analysis is a local, purely heuristic pass (line counts and a crude
+    size-based complexity estimate) computed directly from the supplied code.
+    It never claims to perform semantic or AST-level analysis it cannot do.
+    """
 
     name = "code_analyser"
-    description = (
-        "Analyse code for complexity, potential bugs, and improvement "
-        "opportunities."
-    )
+    description = "Analyse code for complexity, potential bugs, and improvement opportunities."
     permissions = ["read"]
     availability = "limited"
     parameters = {
@@ -38,16 +40,20 @@ class CodeAnalyzerTool(Tool):
     async def run(self, **kwargs: Any) -> ToolResult:
         code = kwargs.get("code", "")
         language = kwargs.get("language", "unknown")
-        lines = code.strip().split("\n")
+        lines = code.splitlines()
+        nonblank = [ln for ln in lines if ln.strip()]
         return ToolResult.success(
             {
                 "language": language,
                 "line_count": len(lines),
+                "nonblank_line_count": len(nonblank),
+                "character_count": len(code),
                 "complexity_estimate": "low" if len(lines) < 50 else "medium",
-                "suggestions": [
-                    "Consider adding docstrings for public functions.",
-                    "Check for consistent error handling patterns.",
-                ],
+                "note": (
+                    "Heuristic analysis only: metrics are computed from raw "
+                    "line/character counts. No semantic or AST analysis is "
+                    "performed."
+                ),
             }
         )
 
@@ -75,12 +81,7 @@ class CodeFormatterTool(Tool):
     }
 
     async def run(self, **kwargs: Any) -> ToolResult:
-        code = kwargs.get("code", "")
-        language = kwargs.get("language", "unknown")
-        return ToolResult.success(
-            {
-                "formatted_code": code,
-                "language": language,
-                "message": "Code formatted (stub — connect to real formatter).",
-            }
+        return ToolResult.failure(
+            "code_formatter is unavailable: no language formatter backend is "
+            "implemented, so the supplied code is returned unmodified."
         )

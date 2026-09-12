@@ -1,7 +1,8 @@
 """Calendar and tasks tool.
 
-Allows agents to manage calendar events and tasks. Stub implementation returns
-structured results ready to be connected to a real calendar/task backend.
+Allows agents to manage calendar events and tasks. The real calendar/task
+backend is not implemented yet, so the tool reports itself as unavailable
+instead of fabricating events or task state.
 """
 
 from __future__ import annotations
@@ -43,45 +44,13 @@ class CalendarTool(Tool):
 
     async def run(self, **kwargs: Any) -> ToolResult:
         action = kwargs.get("action", "")
-        title = kwargs.get("title", "")
-        date = kwargs.get("date", "")
-        task_id = kwargs.get("task_id", "")
-
-        if action == "create_event":
-            return ToolResult.success(
-                {
-                    "action": action,
-                    "event_created": True,
-                    "title": title,
-                    "date": date,
-                    "event_id": "evt_stub_1",
-                }
-            )
-        elif action == "list_events":
-            return ToolResult.success(
-                {
-                    "action": action,
-                    "events": [
-                        {
-                            "id": "evt_stub_1",
-                            "title": "Stub event",
-                            "date": "2025-01-01T10:00:00Z",
-                        }
-                    ],
-                    "count": 1,
-                }
-            )
-        elif action == "complete_task":
-            return ToolResult.success(
-                {
-                    "action": action,
-                    "task_id": task_id,
-                    "completed": True,
-                    "message": f"Task '{task_id}' marked as complete (stub).",
-                }
-            )
-        else:
+        if action not in ("create_event", "list_events", "complete_task"):
             return ToolResult.failure(
                 f"Unknown calendar action '{action}'. "
                 "Use 'create_event', 'list_events', or 'complete_task'."
             )
+        return ToolResult.failure(
+            f"calendar action '{action}' is unavailable: the calendar/task "
+            "backend is not implemented, so no event or task state can be "
+            "read or changed."
+        )

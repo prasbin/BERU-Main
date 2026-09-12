@@ -1,7 +1,8 @@
 """File and document analysis tool.
 
-Allows agents to read and analyse file content. Stub implementation returns
-structured analysis results ready to be connected to real file I/O.
+Allows agents to read and analyse file content. The real file-I/O backend is
+not implemented yet, so the tool reports itself as unavailable and never
+fabricates analysis results.
 """
 
 from __future__ import annotations
@@ -36,15 +37,7 @@ class FileAnalyserTool(Tool):
     }
 
     async def run(self, **kwargs: Any) -> ToolResult:
-        path = kwargs.get("path", "")
-        analysis_type = kwargs.get("analysis_type", "summary")
-        return ToolResult.success(
-            {
-                "path": path,
-                "analysis_type": analysis_type,
-                "analysis": (
-                    f"Stub analysis of '{path}' using '{analysis_type}' mode — "
-                    "connect to real file system."
-                ),
-            }
+        return ToolResult.failure(
+            "file_analyser is unavailable: no file analysis backend is "
+            "implemented, so no file can be read or analysed yet."
         )

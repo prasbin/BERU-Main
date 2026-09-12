@@ -36,17 +36,9 @@ class LookupScriptureTool(Tool):
     }
 
     async def run(self, **kwargs: Any) -> ToolResult:
-        tradition = kwargs.get("tradition", "")
-        topic = kwargs.get("topic", "")
-        return ToolResult.success(
-            {
-                "tradition": tradition,
-                "topic": topic,
-                "passage": (
-                    f"Stub passage from {tradition} tradition on {topic} — "
-                    "connect to real scripture database."
-                ),
-            }
+        return ToolResult.failure(
+            "lookup_scripture is unavailable: no scripture or wisdom database "
+            "is configured, so no passage can be looked up yet."
         )
 
 
@@ -75,16 +67,7 @@ class MeditationTimerTool(Tool):
     }
 
     async def run(self, **kwargs: Any) -> ToolResult:
-        duration = kwargs.get("duration_minutes", 5)
-        technique = kwargs.get("technique", "breathing")
-        return ToolResult.success(
-            {
-                "timer_set": True,
-                "duration_minutes": duration,
-                "technique": technique,
-                "message": (
-                    f"Meditation timer set for {duration} minutes "
-                    f"using {technique} technique."
-                ),
-            }
+        return ToolResult.failure(
+            "meditation_timer is unavailable: no session or timer backend is "
+            "implemented, so no timer can be started."
         )

@@ -1,4 +1,9 @@
-"""Tests for the core tools: web search, file analysis, document generation, calendar."""
+"""Tests for the core tools: web search, file analysis, document generation, calendar.
+
+Real backends are not implemented yet for file_analyser, document_generator,
+and calendar; these tools report themselves as unavailable and never fabricate
+results.
+"""
 
 from __future__ import annotations
 
@@ -29,24 +34,13 @@ async def test_web_search_permissions():
 # ---- FileAnalyserTool tests ----
 
 
-async def test_file_analyser_summary():
+async def test_file_analyser_reports_unavailable():
     tool = FileAnalyserTool()
-    result = await tool.run(path="/tmp/test.py")
-    assert result.ok is True
-    assert result.output["path"] == "/tmp/test.py"
-    assert result.output["analysis_type"] == "summary"
-
-
-async def test_file_analyser_stats_mode():
-    tool = FileAnalyserTool()
-    result = await tool.run(path="/tmp/test.py", analysis_type="stats")
-    assert result.output["analysis_type"] == "stats"
-
-
-async def test_file_analyser_structure_mode():
-    tool = FileAnalyserTool()
-    result = await tool.run(path="/tmp/test.py", analysis_type="structure")
-    assert result.output["analysis_type"] == "structure"
+    result = await tool.run(path="/tmp/test.py", analysis_type="summary")
+    assert result.ok is False
+    assert "unavailable" in result.error
+    assert "no file analysis backend" in result.error
+    assert result.output is None
 
 
 async def test_file_analyser_permissions():
@@ -54,28 +48,28 @@ async def test_file_analyser_permissions():
     assert "read" in tool.permissions
 
 
-async def test_file_analyser_analysis_in_output():
-    tool = FileAnalyserTool()
-    result = await tool.run(path="/tmp/test.py")
-    assert "analysis" in result.output
-
-
 # ---- DocumentGeneratorTool tests ----
 
+# Real document generation needs an LLM backend, which is not implemented yet:
+# the tool reports itself as unavailable rather than fabricating a document.
 
-async def test_document_generator_markdown():
+
+async def test_document_generator_reports_unavailable():
     tool = DocumentGeneratorTool()
     result = await tool.run(prompt="Write a summary", format="markdown")
-    assert result.ok is True
-    assert result.output["format"] == "markdown"
-    assert result.output["content"].startswith("#")
+    assert result.ok is False
+    assert result.error
+    assert result.output is None
 
 
-async def test_document_generator_title():
+async def test_document_generator_needs_llm_credential():
     tool = DocumentGeneratorTool()
-    result = await tool.run(prompt="Write a report", title="Test Report")
-    assert result.output["title"] == "Test Report"
-    assert "Test Report" in result.output["content"]
+    assert tool.required_credentials == ["llm_api_key"]
+    # Without an injected llm_api_key the tool fails honestly, naming the
+    # missing credential — it never emits a fake document body.
+    result = await tool.run(prompt="Write something")
+    assert result.ok is False
+    assert "llm_api_key" in result.error
 
 
 async def test_document_generator_permissions():
@@ -83,46 +77,17 @@ async def test_document_generator_permissions():
     assert "write" in tool.permissions
 
 
-async def test_document_generator_word_count():
-    tool = DocumentGeneratorTool()
-    result = await tool.run(prompt="Write something")
-    assert result.output["word_count"] > 0
-
-
-async def test_document_generator_default_format():
-    tool = DocumentGeneratorTool()
-    result = await tool.run(prompt="test")
-    assert result.output["format"] == "markdown"
-
-
 # ---- CalendarTool tests ----
 
 
-async def test_calendar_create_event():
+async def test_calendar_reports_unavailable():
     tool = CalendarTool()
     result = await tool.run(
         action="create_event", title="Meeting", date="2025-06-01T10:00:00Z"
     )
-    assert result.ok is True
-    assert result.output["action"] == "create_event"
-    assert result.output["event_created"] is True
-    assert result.output["title"] == "Meeting"
-
-
-async def test_calendar_list_events():
-    tool = CalendarTool()
-    result = await tool.run(action="list_events")
-    assert result.ok is True
-    assert result.output["count"] == 1
-    assert len(result.output["events"]) == 1
-
-
-async def test_calendar_complete_task():
-    tool = CalendarTool()
-    result = await tool.run(action="complete_task", task_id="task_1")
-    assert result.ok is True
-    assert result.output["completed"] is True
-    assert result.output["task_id"] == "task_1"
+    assert result.ok is False
+    assert "unavailable" in result.error
+    assert "not implemented" in result.error
 
 
 async def test_calendar_unknown_action():

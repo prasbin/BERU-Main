@@ -95,17 +95,20 @@ async def test_igris_has_tools():
 
 
 async def test_igris_search_knowledge():
+    """Unconfigured study backend reports itself honestly rather than fabricating results."""
     registry = get_agent_registry()
     igris = registry.get("igris")
     tc = ToolCall(id="c1", name="search_knowledge", arguments='{"query": "quantum physics"}')
     result_text = await igris._execute_tool(tc, agent_name="igris")
     result = json.loads(result_text)
 
-    assert result["result"]["query"] == "quantum physics"
-    assert result["result"]["count"] == 1
+    assert "error" in result
+    assert "unavailable" in result["error"]
+    assert "no study knowledge base backend" in result["error"]
 
 
 async def test_igris_create_flashcard():
+    """The flashcard backend is not implemented: the tool must not fake a card."""
     registry = get_agent_registry()
     igris = registry.get("igris")
     tc = ToolCall(
@@ -116,8 +119,9 @@ async def test_igris_create_flashcard():
     result_text = await igris._execute_tool(tc, agent_name="igris")
     result = json.loads(result_text)
 
-    assert result["result"]["flashcard_created"] is True
-    assert result["result"]["front"] == "What is NP?"
+    assert "error" in result
+    assert "unavailable" in result["error"]
+    assert "flashcard storage backend" in result["error"]
 
 
 async def test_igris_tool_call_loop():
@@ -159,6 +163,7 @@ async def test_dhanus_has_tools():
 
 
 async def test_dhanus_lookup_scripture():
+    """The scripture backend is not configured: the tool must not invent a passage."""
     registry = get_agent_registry()
     dhanus = registry.get("dhanus")
     tc = ToolCall(
@@ -169,11 +174,13 @@ async def test_dhanus_lookup_scripture():
     result_text = await dhanus._execute_tool(tc, agent_name="dhanus")
     result = json.loads(result_text)
 
-    assert result["result"]["tradition"] == "vedantic"
-    assert result["result"]["topic"] == "self"
+    assert "error" in result
+    assert "unavailable" in result["error"]
+    assert "scripture" in result["error"]
 
 
 async def test_dhanus_meditation_timer():
+    """No timer backend exists: the tool must not claim a timer was started."""
     registry = get_agent_registry()
     dhanus = registry.get("dhanus")
     tc = ToolCall(
@@ -184,8 +191,9 @@ async def test_dhanus_meditation_timer():
     result_text = await dhanus._execute_tool(tc, agent_name="dhanus")
     result = json.loads(result_text)
 
-    assert result["result"]["timer_set"] is True
-    assert result["result"]["duration_minutes"] == 15
+    assert "error" in result
+    assert "unavailable" in result["error"]
+    assert "timer backend" in result["error"]
 
 
 # ---- TANK agent tests ----
@@ -210,6 +218,7 @@ async def test_tank_has_tools():
 
 
 async def test_tank_code_analyser():
+    """The analyser computes its metrics directly from the supplied code."""
     registry = get_agent_registry()
     tank = registry.get("tank")
     tc = ToolCall(
@@ -222,9 +231,13 @@ async def test_tank_code_analyser():
 
     assert result["result"]["language"] == "python"
     assert result["result"]["line_count"] == 1
+    assert result["result"]["note"].startswith("Heuristic analysis only")
+    # No fabricated per-file advice: the tool is honest about what it computed.
+    assert "suggestions" not in result["result"]
 
 
 async def test_tank_code_formatter():
+    """No formatter backend exists: the tool must not claim formatting happened."""
     registry = get_agent_registry()
     tank = registry.get("tank")
     tc = ToolCall(
@@ -235,8 +248,9 @@ async def test_tank_code_formatter():
     result_text = await tank._execute_tool(tc, agent_name="tank")
     result = json.loads(result_text)
 
-    assert result["result"]["formatted_code"] == "x=1"
-    assert result["result"]["language"] == "python"
+    assert "error" in result
+    assert "unavailable" in result["error"]
+    assert "formatter backend" in result["error"]
 
 
 # ---- Cross-agent isolation tests ----

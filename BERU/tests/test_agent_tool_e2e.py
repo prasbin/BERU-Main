@@ -226,3 +226,67 @@ async def test_e2e_core_agent_runs_its_tools_directly():
     assert result.agent == "beru_core"
     assert result.tool_calls_made == 1
     assert "BERU (mock)" in result.content
+
+
+# ---- Durable credential scoping with a real tool ----
+
+# The single real tool wired to the Stage 5.4 scoping mechanism is
+# document_generator (legitimate need: real generation requires an LLM key).
+# These tests drive that real, registry-backed tool through the agent runtime
+# to prove the scoped view is granted, unrelated/owner keys are not exposed,
+# and a missing required credential fails honestly.
+
+
+def _core_doc_generator():
+    from backend.agents.registry import get_agent_registry
+
+    core = get_agent_registry().get("beru_core")
+    return core, core._tools["document_generator"]
+
+
+async def test_e2e_document_generator_receives_only_its_scoped_credential():
+    """Authorized run: the tool gets exactly llm_api_key, nothing else."""
+    core, tool = _core_doc_generator()
+    assert tool.required_credentials == ["llm_api_key"]
+
+    call = ToolCall(
+        id="call_cred_1",
+        name="document_generator",
+        arguments=json.dumps({"prompt": "write a report", "format": "markdown"}),
+    )
+    settings = Settings(
+        llm_api_key="sk-e2e-llm",
+        BERU_EMBEDDING_API_KEY="sk-e2e-emb",
+        BERU_API_KEY="owner-secret",
+    )
+    result = await core.run_tool(call, confirm=True, agent_name="beru_core", settings=settings)
+
+    # Authorized credential is available to the tool...
+    assert tool.credentials.get("llm_api_key") == "sk-e2e-llm"
+    # ...while unrelated and owner credentials are never exposed.
+    assert tool.credentials.has("embedding_api_key") is False
+    assert "api_key" not in tool.credentials.names()
+    assert "owner-secret" not in repr(tool.credentials)
+    assert "sk-e2e-emb" not in repr(tool.credentials)
+    assert "sk-e2e-llm" not in repr(tool.credentials)
+
+    # The generation backend is not implemented, so even with the key the tool
+    # fails honestly rather than fabricating a document.
+    assert result.ok is False
+    assert "not implemented" in (result.error or "")
+
+
+async def test_e2e_document_generator_missing_key_fails_honestly():
+    """Without the declared credential the tool names it and fails, no fake output."""
+    core, tool = _core_doc_generator()
+    call = ToolCall(
+        id="call_cred_2",
+        name="document_generator",
+        arguments=json.dumps({"prompt": "anything"}),
+    )
+    result = await core.run_tool(call, confirm=True, agent_name="beru_core", settings=None)
+
+    assert tool.credentials.empty()
+    assert result.ok is False
+    assert "llm_api_key" in (result.error or "")
+    assert result.output is None
