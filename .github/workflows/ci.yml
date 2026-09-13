@@ -45,7 +45,11 @@ jobs:
         run: pip install -r requirements-dev.lock
 
       - name: Run tests
-        run: pytest --tb=short -q
+        run: |
+          python -c "import sys, pytest; print('PYTEST', pytest.__version__, sys.executable)" 2>&1
+          out="$(pytest --tb=short -q 2>&1)"; code=$?
+          echo "::error title=pytest exit $code::$(printf '%s' "$out" | tail -n 25 | tr '\n' '|')"
+          exit $code
 
   postgres-test:
     runs-on: ubuntu-latest
