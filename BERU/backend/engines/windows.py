@@ -31,14 +31,20 @@ _WM_CLOSE = 0x0010
 _SW_RESTORE = 9
 _MONITORINFOF_PRIMARY = 0x00000001
 
-_WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
-_MONITORENUMPROC = ctypes.WINFUNCTYPE(
-    wintypes.BOOL,
-    wintypes.HMONITOR,
-    wintypes.HDC,
-    ctypes.POINTER(wintypes.RECT),
-    wintypes.LPARAM,
-)
+# ``ctypes.WINFUNCTYPE`` exists only on Windows; leave the callback prototypes
+# unset elsewhere. Consumers only reach them after ``_user32()`` returns non-None.
+if platform.system() == "Windows":
+    _WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    _MONITORENUMPROC = ctypes.WINFUNCTYPE(
+        wintypes.BOOL,
+        wintypes.HMONITOR,
+        wintypes.HDC,
+        ctypes.POINTER(wintypes.RECT),
+        wintypes.LPARAM,
+    )
+else:
+    _WNDENUMPROC = None
+    _MONITORENUMPROC = None
 
 
 class _MONITORINFO(ctypes.Structure):
