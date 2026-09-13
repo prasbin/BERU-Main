@@ -45,7 +45,12 @@ jobs:
         run: pip install -r requirements-dev.lock
 
       - name: Run tests
-        run: pytest --tb=short -q
+        run: |
+          set +e
+          out="$(pytest -ra -q 2>&1)"; code=$?
+          echo "::error title=pytest short exit=$code::$(printf '%s' "$out" | grep -E '^tests/|FAILED|ERROR|passed|failed|=== ' | tail -n 40 | tr '\n' '|')"
+          echo "::error title=pytest tail exit=$code::$(printf '%s' "$out" | tail -n 60 | tr '\n' '|')"
+          exit $code
 
   postgres-test:
     runs-on: ubuntu-latest
@@ -76,4 +81,9 @@ jobs:
       - name: Run tests against PostgreSQL
         env:
           BERU_TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/beru_test
-        run: pytest --tb=short -q
+        run: |
+          set +e
+          out="$(pytest -ra -q 2>&1)"; code=$?
+          echo "::error title=pytest short exit=$code::$(printf '%s' "$out" | grep -E '^tests/|FAILED|ERROR|passed|failed|=== ' | tail -n 40 | tr '\n' '|')"
+          echo "::error title=pytest tail exit=$code::$(printf '%s' "$out" | tail -n 60 | tr '\n' '|')"
+          exit $code
