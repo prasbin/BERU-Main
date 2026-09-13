@@ -44,12 +44,17 @@ class InputResult:
 
 
 def _load_pyautogui():
-    """Return the pyautogui module or None if it cannot be imported."""
+    """Return the pyautogui module or None if it cannot be used on this host.
+
+    On headless Linux ``import pyautogui`` raises (no ``DISPLAY``), so any
+    import failure reports ``None`` and the engines degrade to their
+    ``unavailable`` state instead of raising (see module docstring).
+    """
     try:
         import pyautogui
 
         return pyautogui
-    except ImportError:
+    except Exception:  # noqa: BLE001 - optional desktop lib; degrade to unavailable
         return None
 
 
