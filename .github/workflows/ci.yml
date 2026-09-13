@@ -6,6 +6,13 @@ on:
   pull_request:
     branches: [main]
 
+# The project lives in the BERU/ subdirectory of the repository, so every
+# run step must execute there (GitHub Actions only discovers workflows from
+# the repository root).
+defaults:
+  run:
+    working-directory: BERU
+
 jobs:
   lint:
     runs-on: ubuntu-latest
