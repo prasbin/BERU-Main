@@ -9,6 +9,7 @@ that survive restarts / respect revocation and key rotation.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any
 
@@ -141,6 +142,21 @@ async def test_owner_bootstrap_creates_single_owner(multiuser):
             )
         ).scalar_one()
         assert count == 1
+
+
+@pytest.mark.asyncio
+async def test_owner_bootstrap_never_logs_generated_password(multiuser, monkeypatch, caplog):
+    """Ensure the plaintext of a generated owner password never reaches logs."""
+    from backend.services.user_service import ensure_owner
+
+    fixed = "a" * 48  # token_hex(24) produces 48 hex characters
+    monkeypatch.setattr("backend.services.user_service.secrets.token_hex", lambda n=24: fixed)
+    with caplog.at_level(logging.WARNING, logger="backend.services.user_service"):
+        async with multiuser.maker() as session:
+            owner = await ensure_owner(session)
+    assert owner is not None
+    assert fixed not in caplog.text, "generated password must never appear in logs"
+    assert "BERU_OWNER_PASSWORD" in caplog.text
 
 
 @pytest.mark.asyncio

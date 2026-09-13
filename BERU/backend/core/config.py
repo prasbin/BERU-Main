@@ -58,8 +58,10 @@ class Settings(BaseSettings):
 
     # ---- Accounts (Stage 5.1) ----
     # First-run bootstrap: when auth is enabled and no owner account exists yet,
-    # the app creates one with these credentials at startup (a random password
-    # is generated and logged when BERU_OWNER_PASSWORD is blank).
+    # the app creates one with these credentials at startup. A blank
+    # BERU_OWNER_PASSWORD is replaced by a random value whose plaintext is
+    # intentionally never logged or printed; set it yourself on a fresh install
+    # to control the owner password.
     owner_username: str = Field(default="owner", alias="BERU_OWNER_USERNAME")
     owner_password: str = Field(default="", alias="BERU_OWNER_PASSWORD")
 

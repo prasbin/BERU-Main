@@ -272,7 +272,7 @@ commented list. Key variables:
 | `BERU_MAX_TOOL_ITERATIONS` | `10`                  | Max tool-call iterations per request.                |
 | `BERU_API_KEY`    | *(empty)*                        | Single-user API key; blank disables auth (localhost).|
 | `BERU_OWNER_USERNAME` | `owner`                     | First-run owner account username (multi-user auth).  |
-| `BERU_OWNER_PASSWORD` | *(empty)*                    | First-run owner password; random + logged when blank.|
+| `BERU_OWNER_PASSWORD` | *(empty)*                    | First-run owner password; random (plaintext never logged) when blank.|
 | `BERU_RATE_LIMIT_AUTH_RPM` | `10`                  | Max `/auth/login` attempts per minute per IP.        |
 | `BERU_RATE_LIMIT_AUTH_BURST` | `3`                 | Auth burst before the limiter activates.             |
 | `BERU_TRUST_PROXY_HEADERS` | `false`                  | Honor `X-Forwarded-For` for rate limiting (proxy only). |

@@ -34,6 +34,11 @@ A single command starts a local server matching that URL:
 docker compose up -d postgres
 ```
 
+> Note: `docker-compose.yml` is **local-development only** — the port is bound
+> to loopback and the password is a non-secret default (`beru`). Override
+> `POSTGRES_PASSWORD` (with a `.env` file or the shell) and change the bind
+> before exposing the server beyond localhost.
+
 - Schema is managed by Alembic; migrations convert the async URL to the sync
   driver (`psycopg2`) automatically. Migrations are applied automatically at
   application startup (`backend.database.init_db`); to apply them manually from

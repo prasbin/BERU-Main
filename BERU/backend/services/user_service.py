@@ -80,8 +80,9 @@ async def ensure_owner(session) -> User | None:
     """Create the owner account on first run (bootstrap), if auth is enabled.
 
     Idempotent: when an owner already exists it is returned untouched. A blank
-    ``BERU_OWNER_PASSWORD`` yields a random password that is logged (never
-    printed), so a fresh install is usable out of the box yet still locked.
+    ``BERU_OWNER_PASSWORD`` is replaced by a random value used only to derive
+    the stored hash: its plaintext is intentionally never logged or printed
+    (so the value is unrecoverable). The API key remains the owner credential.
     """
     settings = get_settings()
     if not settings.auth_enabled:
@@ -102,8 +103,10 @@ async def ensure_owner(session) -> User | None:
     await session.commit()
     if not settings.owner_password:
         logger.warning(
-            "Created owner account '%s' with a randomly generated password "
-            "(set BERU_OWNER_PASSWORD to take ownership).",
+            "Created owner account '%s'. BERU_OWNER_PASSWORD was blank, so a "
+            "random password was generated; its plaintext is intentionally "
+            "never logged or printed. Set BERU_OWNER_PASSWORD yourself on a "
+            "fresh install to control the owner password.",
             user.username,
         )
     return user

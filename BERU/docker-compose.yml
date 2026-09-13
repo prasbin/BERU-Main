@@ -1,13 +1,17 @@
 services:
+  # Local-DEVELOPMENT only. The postgres port is bound to loopback and the
+  # password is a non-secret default; override POSTGRES_PASSWORD (via a .env
+  # file or the shell) and loosen the bind only if this must be reachable from
+  # another host.
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: beru
-      POSTGRES_PASSWORD: beru
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-beru}
       POSTGRES_DB: beru
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - beru-pgdata:/var/lib/postgresql/data
     healthcheck:
