@@ -1,0 +1,18 @@
+# BERU voice plugin dependencies (whisper STT + edge-tts TTS + Windows SAPI).
+# Install with:  pip install -r requirements-voice.txt
+# (or the equivalent 'pip install -e .[voice]' metadata extra).
+# Mirror of pyproject.toml [project.optional-dependencies].voice — keep in sync.
+
+openai-whisper>=20231117
+edge-tts>=6.1
+pywin32>=306
+
+# openai-whisper pulls in numba, which hard-ceils the NumPy it imports
+# (numba 0.67 refuses numpy >= 2.5). scipy in turn ships its own numpy
+# compatibility guard and warns when the resolved numpy falls outside it
+# (scipy 1.13 capped numpy at < 2.3, warning against numpy 2.4). Pin the
+# sound closure we validated: numba at its current major, numpy under its
+# import ceiling, and a scipy new enough to declare numpy 2.4 support.
+numpy>=1.26,<2.5
+numba>=0.59,<0.68
+scipy>=1.18,<2.0

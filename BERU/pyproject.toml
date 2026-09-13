@@ -39,12 +39,20 @@ dependencies = [
 # Real voice plugins (Stage 5.3): install with `pip install -e .[voice]` or
 # `pip install beru[voice]`. Both are first-party providers discovered through
 # entry points; without them BERU keeps the hermetic mock voice providers.
+# Mirrors requirements-voice.txt (the source of truth) — keep in sync.
 voice = [
     "openai-whisper>=20231117",
     "edge-tts>=6.1",
     # Windows-only SAPI TTS (BERU_VOICE_TTS_PROVIDER=sapi). Installs cleanly on
     # other platforms but only functions where SAPI itself exists.
     "pywin32>=306",
+    # openai-whisper pulls in numba, which hard-ceils the NumPy it imports
+    # (numba 0.67 refuses numpy >= 2.5); scipy ships its own numpy guard and
+    # warns on a numpy outside its supported range (scipy 1.13 capped at < 2.3).
+    # These pins freeze the validated warning-free closure.
+    "numpy>=1.26,<2.5",
+    "numba>=0.59,<0.68",
+    "scipy>=1.18,<2.0",
 ]
 
 [project.entry-points."beru.stt_providers"]
