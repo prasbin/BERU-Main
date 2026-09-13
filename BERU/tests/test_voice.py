@@ -356,6 +356,59 @@ async def test_voice_listen_tool_transcribes_with_whisper_plugin(monkeypatch):
     assert not result.output["was_wake"]
 
 
+async def test_voice_speak_tool_synthesizes_with_edge_tts_plugin(monkeypatch):
+    """The edge_tts plugin factory resolves through discovery, the engine wires
+    it in, and the tool's guard lets a real (non-mock) provider synthesize.
+
+    The chain under test is the production path: ``build_tts_provider("edge_tts")
+    -> build_engine -> VoiceSpeakTool.run``. edge-tts itself is faked via
+    ``sys.modules`` the same way the plugin unit tests do, so the test stays
+    hermetic and needs no network.
+    """
+    import sys
+
+    from backend.core.config import Settings
+    from backend.engines.speech.edge_tts import build_edge_tts
+    from backend.plugins import discovery
+    from backend.tools.voice import VoiceSpeakTool, build_engine
+
+    class _FakeCommunicate:
+        async def stream(self):
+            yield {"type": "audio", "data": b"ID3"}
+            yield {"type": "WordBoundary", "data": {"offset": 0}}
+            yield {"type": "audio", "data": b"-mp3tail"}
+
+    class _FakeEdgeTTsModule:
+        def Communicate(self, text, voice):  # noqa: ANN001, ARG002
+            self.calls.append((text, voice))
+            return _FakeCommunicate()
+
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str]] = []
+
+    fake_module = _FakeEdgeTTsModule()
+    monkeypatch.setitem(sys.modules, "edge_tts", fake_module)
+    monkeypatch.setattr(
+        discovery,
+        "load_entry_point_factories",
+        lambda group: {"edge_tts": build_edge_tts} if group == discovery.GROUP_TTS else {},
+    )
+
+    settings = Settings(BERU_VOICE_TTS_PROVIDER="edge_tts", BERU_VOICE_STT_PROVIDER="mock")
+    engine = build_engine(settings)
+    assert engine.status()["stt_provider"] == "MockSTTProvider"
+    assert engine.status()["tts_provider"] == "EdgeTTSProvider"
+
+    tool = VoiceSpeakTool(engine=engine)
+    result = await tool.run(text="hello there")
+    assert result.ok is True, result.error
+    assert result.output["text"] == "hello there"
+    assert result.output["format"] == "mp3"
+    assert result.output["bytes"] == len(b"ID3-mp3tail")
+    assert result.output["id"]
+    assert fake_module.calls == [("hello there", "en-US-JennyNeural")]
+
+
 async def test_voice_speak_tool_honest_with_mock_tts():
     """With the simulated TTS provider, the tool must not claim speech."""
     from backend.tools.voice import VoiceSpeakTool

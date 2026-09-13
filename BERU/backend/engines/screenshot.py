@@ -3,7 +3,9 @@
 Uses ``mss`` for a fast full-screen grab and ``Pillow`` to compute basic image
 metadata (size, dominant colour, brightness) that gives BERU a lightweight
 sense of the current screen state. The raw PNG is written to a temp directory
-so it can be surfaced to the user or an agent.
+so it can be surfaced to the user or an agent. Only the current mss/Pillow APIs
+are used (``mss.MSS`` instead of the legacy ``mss.mss``, ``get_flattened_data``
+instead of the Pillow 14-removed ``getdata``).
 
 If the screenshot libraries are not installed, the engine reports an
 ``unavailable`` state instead of crashing, satisfying the "safe disabled"
@@ -95,7 +97,7 @@ class ScreenshotEngine:
             import mss
             from PIL import Image
 
-            with mss.mss() as sct:
+            with mss.MSS() as sct:
                 monitor = sct.monitors[0]  # full virtual screen
                 raw = sct.grab(monitor)
                 png = mss.tools.to_png(raw.rgb, raw.size)
@@ -108,7 +110,7 @@ class ScreenshotEngine:
 
             # Basic screen-state metadata.
             thumb = image.convert("RGB").resize((64, 64))
-            pixels = list(thumb.getdata())
+            pixels = list(thumb.get_flattened_data())
             n = max(len(pixels), 1)
             r = sum(p[0] for p in pixels) // n
             g = sum(p[1] for p in pixels) // n

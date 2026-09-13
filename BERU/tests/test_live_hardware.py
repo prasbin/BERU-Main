@@ -14,7 +14,8 @@ unsupported clipboard) skips or fails honestly — never fakes a pass.
 
 Running the voice test requires Windows with a SAPI voice (pywin32 present via
 the ``voice`` extra). Running the browser test requires Playwright Chromium
-installed (``python -m playwright install chromium``).
+installed (``python -m playwright install chromium``). The edge-tts voice test
+needs network access to Microsoft Edge's online neural voice service.
 """
 
 from __future__ import annotations
@@ -30,7 +31,8 @@ from backend.core.config import Settings
 from backend.engines.browser import BrowserAction, get_browser_engine
 from backend.engines.clipboard import get_clipboard_engine
 from backend.engines.screenshot import get_screenshot_engine
-from backend.engines.speech import build_tts_provider
+from backend.engines.speech import build_stt_provider, build_tts_provider
+from backend.engines.speech.edge_tts import build_edge_tts
 from backend.engines.speech.whisper import build_whisper_stt
 from backend.engines.voice import VoiceEngine
 from backend.tools.voice import VoiceListenTool, VoiceSpeakTool, build_engine
@@ -232,3 +234,44 @@ async def test_live_whisper_transcribes_real_speech_clip() -> None:
     text = result.output["text"].strip()
     assert text, "whisper returned no text for the synthesized clip"
     assert result.output["was_wake"] is False
+
+
+async def test_live_edge_tts_synthesizes_real_mp3() -> None:
+    """Real edge-tts synthesis yields a genuine MP3 clip through the voice chain.
+
+    The edge_tts plugin is exercised over the real network (Microsoft's neural
+    voices) through ``engine.respond`` and ``VoiceSpeakTool.run`` — the same
+    end-to-end shape as the real whisper validation. Skipped when edge-tts is
+    not installed. The voice is overridable with ``BERU_LIVE_TTS_VOICE``.
+    """
+    _require_live_hw()
+    if importlib.util.find_spec("edge_tts") is None:
+        pytest.skip("edge-tts not installed (pip install -e .[voice])")
+
+    voice = (os.environ.get("BERU_LIVE_TTS_VOICE", "") or "en-US-JennyNeural").strip()
+    settings = Settings(
+        BERU_VOICE_STT_PROVIDER="mock",
+        BERU_VOICE_TTS_PROVIDER="edge_tts",
+        BERU_VOICE_TTS_VOICE=voice,
+    )
+    # Source checkouts don't install BERU's own entry points, so construct the
+    # first-party provider directly for the live run (the plugin-discovery path
+    # itself is covered hermetically in tests/test_voice.py).
+    engine = VoiceEngine(
+        stt=build_stt_provider("mock", settings),
+        tts=build_edge_tts(settings),
+    )
+    assert engine.status()["tts_provider"] == "EdgeTTSProvider"
+
+    session = await engine.create_session()
+    clip = await engine.respond(session.session_id, "live edge tts speech check")
+    assert clip.format == "mp3"
+    assert len(clip.audio) > 1000, "edge-tts returned no real audio"
+    assert clip.to_dict()["bytes"] == len(clip.audio)
+
+    tool = VoiceSpeakTool(engine=engine)
+    result = await tool.run(text="tool edge tts check")
+    assert result.ok is True, result.error
+    assert result.output["format"] == "mp3"
+    assert result.output["bytes"] > 1000
+    assert result.output["id"]
