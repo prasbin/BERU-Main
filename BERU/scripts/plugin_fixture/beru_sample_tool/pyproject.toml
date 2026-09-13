@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "beru-sample-tool"
 version = "0.1.0"
 description = "Sample BERU tool plugin used by the wheel-install gate."
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = ["beru"]
 
 [project.entry-points."beru.tools"]

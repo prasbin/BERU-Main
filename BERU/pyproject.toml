@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "beru"
 version = "0.1.0"
 description = "BERU — a modular personal AI operating system / agent backend."
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 # Runtime dependencies mirror requirements.txt (the source of truth for
 # installs). Declaring them here lets `pip install .` and wheel installs
 # resolve the full dependency tree from package metadata.

@@ -137,8 +137,8 @@ tools, voice, device control) builds on.
 - **Request size limits**: body size cap and message length validation.
 - **Retry/backoff**: exponential backoff with jitter on transient LLM failures
   (429, 5xx, network errors); respects `Retry-After` headers.
-- **CI**: GitHub Actions running ruff (lint + format check) and pytest across
-  Python 3.10–3.12 on every push/PR.
+- **CI**: GitHub Actions running ruff (lint) and pytest across Python 3.11–3.12
+  on every push/PR.
 - **Tests**: 840 tests covering config, LLM layer, agents/tools, real tool
   execution + confirmation flow, memory, streaming, auth, rate limits, retries,
   database migrations, the full chat flow, the proactive runtime (scheduler,
@@ -155,7 +155,7 @@ tools, voice, device control) builds on.
 
 ## Requirements
 
-- Python **3.10+**
+- Python **3.11+**
 - The dependencies in [`requirements.txt`](requirements.txt) (FastAPI, Uvicorn,
   Pydantic v2, SQLAlchemy 2.0, aiosqlite, Alembic, httpx, Playwright).
   Browser automation additionally needs the Chromium runtime:
