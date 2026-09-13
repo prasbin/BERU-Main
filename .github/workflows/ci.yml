@@ -46,9 +46,10 @@ jobs:
 
       - name: Run tests
         run: |
-          python -c "import sys, pytest; print('PYTEST', pytest.__version__, sys.executable)" 2>&1
+          echo "::notice title=diag::$(python -c "import sys, pytest; print('PYTEST', pytest.__version__, sys.executable, flush=True)" 2>&1 | tr '\n' '|')"
+          set +e
           out="$(pytest --tb=short -q 2>&1)"; code=$?
-          echo "::error title=pytest exit $code::$(printf '%s' "$out" | tail -n 25 | tr '\n' '|')"
+          echo "::error title=pytest exit $code::$(printf '%s' "$out" | tail -n 30 | tr '\n' '|')"
           exit $code
 
   postgres-test:
