@@ -47,6 +47,7 @@ pytest==9.1.1
 python-dotenv==1.0.1
 pytweening==1.2.0
 ruff==0.16.4
+setuptools==81.0.0
 starlette==0.38.6
 typing-inspection==0.4.2
 typing_extensions==4.15.0

@@ -7,3 +7,8 @@
 pytest>=8.0
 pytest-asyncio>=0.23
 ruff>=0.4
+
+# Build backend declared by pyproject [build-system]; required for `pip install .`
+# and the bare-wheel hermetic test (tests/test_plugins.py builds with
+# --no-build-isolation, so setuptools must already be present in the env).
+setuptools>=80

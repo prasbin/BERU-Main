@@ -24,7 +24,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install ruff
-        run: pip install ruff
+        run: pip install -r requirements-dev.lock
 
       - name: Lint
         run: ruff check .
@@ -42,7 +42,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: pip install -r requirements-dev.txt
+        run: pip install -r requirements-dev.lock
 
       - name: Run tests
         run: pytest --tb=short -q
@@ -71,7 +71,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install -r requirements-dev.txt
+        run: pip install -r requirements-dev.lock
 
       - name: Run tests against PostgreSQL
         env:
