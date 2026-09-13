@@ -311,6 +311,51 @@ async def test_voice_listen_tool_transcribes_buffered_audio():
     assert not result.output["was_wake"]
 
 
+async def test_voice_listen_tool_transcribes_with_whisper_plugin(monkeypatch):
+    """The whisper plugin factory resolves through discovery, the engine wires
+    it in, and the tool's guard lets a real (non-mock) provider transcribe.
+
+    The chain under test is the production path: ``build_stt_provider("whisper")
+    -> build_engine -> VoiceListenTool.run``. Whisper itself is faked via
+    ``sys.modules`` the same way the plugin unit tests do, so the test stays
+    hermetic.
+    """
+    import sys
+
+    from backend.core.config import Settings
+    from backend.engines.speech.whisper import build_whisper_stt
+    from backend.plugins import discovery
+    from backend.tools.voice import VoiceListenTool, build_engine
+
+    class _FakeWhisperModel:
+        def transcribe(self, path, language=None):  # noqa: ANN001, ARG002
+            return {"text": "open the calendar"}
+
+    class _FakeWhisperModule:
+        def load_model(self, name):  # noqa: ANN001, ARG002
+            return _FakeWhisperModel()
+
+    monkeypatch.setitem(sys.modules, "whisper", _FakeWhisperModule())
+    monkeypatch.setattr(
+        discovery,
+        "load_entry_point_factories",
+        lambda group: {"whisper": build_whisper_stt} if group == discovery.GROUP_STT else {},
+    )
+
+    settings = Settings(BERU_VOICE_STT_PROVIDER="whisper", BERU_VOICE_TTS_PROVIDER="mock")
+    engine = build_engine(settings)
+    assert engine.status()["stt_provider"] == "WhisperSTTProvider"
+    assert engine.status()["tts_provider"] == "MockTTSProvider"
+
+    session = await engine.create_session()
+    await engine.ingest_audio(session.session_id, encode_silence(200))
+    tool = VoiceListenTool(engine=engine)
+    result = await tool.run(session_id=session.session_id)
+    assert result.ok is True, result.error
+    assert result.output["text"] == "open the calendar"
+    assert not result.output["was_wake"]
+
+
 async def test_voice_speak_tool_honest_with_mock_tts():
     """With the simulated TTS provider, the tool must not claim speech."""
     from backend.tools.voice import VoiceSpeakTool

@@ -16,6 +16,7 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Protocol
 
 from backend.core.config import Settings, get_settings
@@ -223,6 +224,25 @@ BUILTIN_TTS_FACTORIES: dict[str, Callable[[Settings], TTSProvider]] = {
 }
 
 
+def _first_party_plugin_hint(name: str) -> str | None:
+    """Explain a first-party plugin name that no entry point registered.
+
+    First-party providers (``whisper``, ``edge_tts``) live in the source tree
+    but only register as entry points once BERU's own package metadata is
+    installed. On a bare source checkout (which never installs itself) the name
+    resolves to nothing; return the real remedy instead of a bare "unknown".
+    Returns ``None`` when ``name`` is not a plugin module next to this file.
+    """
+    candidate = Path(__file__).with_name(f"{name}.py")
+    if not candidate.is_file():
+        return None
+    return (
+        f"'{name}' is a first-party speech plugin shipped with BERU; it is not "
+        "resolvable here because BERU is not installed with its optional voice "
+        "extra. Install it (pip install -e '.[voice]') to register the provider."
+    )
+
+
 def build_stt_provider(
     provider: str, settings: Settings | None = None
 ) -> STTProvider:
@@ -238,10 +258,14 @@ def build_stt_provider(
     name = provider.lower().strip()
     factory = providers.get(name)
     if factory is None:
-        raise ValueError(
+        hint = _first_party_plugin_hint(name)
+        message = (
             f"Unknown STT provider '{provider}'. "
             f"Supported: {', '.join(sorted(providers))}."
         )
+        if hint:
+            message += f" {hint}"
+        raise ValueError(message)
     stt = factory(settings)
     if not hasattr(stt, "transcribe"):
         raise ValueError(
@@ -266,10 +290,14 @@ def build_tts_provider(
     name = provider.lower().strip()
     factory = providers.get(name)
     if factory is None:
-        raise ValueError(
+        hint = _first_party_plugin_hint(name)
+        message = (
             f"Unknown TTS provider '{provider}'. "
             f"Supported: {', '.join(sorted(providers))}."
         )
+        if hint:
+            message += f" {hint}"
+        raise ValueError(message)
     tts = factory(settings)
     if not hasattr(tts, "synthesize"):
         raise ValueError(

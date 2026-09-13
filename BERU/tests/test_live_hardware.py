@@ -19,6 +19,7 @@ installed (``python -m playwright install chromium``).
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -29,6 +30,9 @@ from backend.core.config import Settings
 from backend.engines.browser import BrowserAction, get_browser_engine
 from backend.engines.clipboard import get_clipboard_engine
 from backend.engines.screenshot import get_screenshot_engine
+from backend.engines.speech import build_tts_provider
+from backend.engines.speech.whisper import build_whisper_stt
+from backend.engines.voice import VoiceEngine
 from backend.tools.voice import VoiceListenTool, VoiceSpeakTool, build_engine
 
 
@@ -187,3 +191,44 @@ async def test_live_voice_listen_fails_honestly_without_real_stt() -> None:
     result = await tool.run(session_id="whatever")
     assert result.ok is False
     assert "limited" in result.error.lower()
+
+
+async def test_live_whisper_transcribes_real_speech_clip() -> None:
+    """Real whisper STT transcribes audio produced by real SAPI TTS.
+
+    The full real speech chain runs on hardware: synthesize with Windows SAPI,
+    buffer the clip as the "captured" audio, and let ``voice_listen`` transcribe
+    it with whisper. Skipped when openai-whisper is not installed. The model
+    size is overridable with ``BERU_LIVE_STT_MODEL`` (default ``tiny``).
+    """
+    _require_live_hw()
+    if importlib.util.find_spec("whisper") is None:
+        pytest.skip("openai-whisper not installed (pip install -e .[voice])")
+
+    model = (os.environ.get("BERU_LIVE_STT_MODEL", "") or "tiny").strip() or "tiny"
+    settings = Settings(
+        BERU_VOICE_STT_PROVIDER="whisper",
+        BERU_VOICE_STT_MODEL=model,
+        BERU_VOICE_TTS_PROVIDER="sapi",
+    )
+    # Source checkouts don't install BERU's own entry points, so construct the
+    # first-party provider directly for the live run (the plugin-discovery path
+    # itself is covered hermetically in tests/test_voice.py).
+    engine = VoiceEngine(
+        stt=build_whisper_stt(settings),
+        tts=build_tts_provider("sapi", settings),
+    )
+    assert engine.status()["stt_provider"] == "WhisperSTTProvider"
+
+    session = await engine.create_session()
+    clip = await engine.respond(
+        session.session_id, "hello this is the live transcription test"
+    )
+    await engine.ingest_audio(session.session_id, clip.audio)
+
+    tool = VoiceListenTool(engine=engine)
+    result = await tool.run(session_id=session.session_id)
+    assert result.ok is True, result.error
+    text = result.output["text"].strip()
+    assert text, "whisper returned no text for the synthesized clip"
+    assert result.output["was_wake"] is False

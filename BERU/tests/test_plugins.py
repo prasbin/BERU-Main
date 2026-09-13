@@ -426,6 +426,34 @@ def test_build_tts_unknown_raises(monkeypatch):
         build_tts_provider("missing", settings=Settings())
 
 
+def test_build_stt_unknown_first_party_plugin_gets_actionable_hint(monkeypatch):
+    """An unregistered first-party plugin name explains the real remedy."""
+    monkeypatch.setattr(discovery, "load_entry_point_factories", lambda group: {})
+    with pytest.raises(ValueError) as excinfo:
+        build_stt_provider("whisper", settings=Settings())
+    message = str(excinfo.value)
+    assert "Unknown STT provider 'whisper'" in message
+    assert "first-party speech plugin" in message
+    assert "pip install -e '.[voice]'" in message
+
+
+def test_build_tts_unknown_first_party_plugin_gets_actionable_hint(monkeypatch):
+    monkeypatch.setattr(discovery, "load_entry_point_factories", lambda group: {})
+    with pytest.raises(ValueError) as excinfo:
+        build_tts_provider("edge_tts", settings=Settings())
+    message = str(excinfo.value)
+    assert "Unknown TTS provider 'edge_tts'" in message
+    assert "first-party speech plugin" in message
+    assert "pip install -e '.[voice]'" in message
+
+
+def test_build_truly_unknown_name_has_no_plugin_hint(monkeypatch):
+    monkeypatch.setattr(discovery, "load_entry_point_factories", lambda group: {})
+    with pytest.raises(ValueError) as excinfo:
+        build_stt_provider("missing", settings=Settings())
+    assert "first-party" not in str(excinfo.value).lower()
+
+
 # ---------------------------------------------------------------------------
 # Whisper STT plugin
 # ---------------------------------------------------------------------------
