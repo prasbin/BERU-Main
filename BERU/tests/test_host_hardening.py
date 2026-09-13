@@ -191,7 +191,7 @@ async def test_posix_passes_least_privilege_account_to_subprocess(monkeypatch):
     executor = CommandExecutor(user="nobody", group="nogroup")
     result = await executor.execute("echo hi")
     assert result.status == CommandStatus.COMPLETED
-    assert captured["args"] == ["bash", "-c", "echo hi"]
+    assert list(captured["args"]) == ["bash", "-c", "echo hi"]
     assert captured["kwargs"]["user"] == "nobody"
     assert captured["kwargs"]["group"] == "nogroup"
 

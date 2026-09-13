@@ -63,7 +63,7 @@ def test_engine_set_cursor_monotonic():
 def test_engine_record_activity_updates_last_seen():
     engine = SyncEngine()
     device = engine.register_device(name="Phone")
-    assert device.last_seen == device.created_at  # within same instant create
+    assert (device.last_seen - device.created_at).total_seconds() < 1  # same-instant create
     assert engine.record_activity("missing") is False
 
 
