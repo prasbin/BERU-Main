@@ -16,14 +16,19 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.api.deps import get_chat_service
 from backend.api.security import require_api_key, websocket_authorized
-from backend.core.config import get_settings
+from backend.core.config import Settings, get_settings
+from backend.database.base import get_session
 from backend.engines.speech import (
     build_stt_provider,
     build_tts_provider,
 )
 from backend.engines.voice import VoiceEngine
+from backend.services.chat_service import ChatService
+from backend.services.voice_chat import VoiceChatOutcome, VoiceChatService
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +86,36 @@ class TranscribeTextRequest(BaseModel):
 class RespondRequest(BaseModel):
     session_id: str
     text: str
+
+
+class ConverseRequest(BaseModel):
+    """A single voice conversation turn through the full chain.
+
+    Exactly one of ``audio`` (base64 speech) or ``text`` must be provided.
+    """
+
+    session_id: str = Field(..., description="The voice session to converse on.")
+    audio: str | None = Field(
+        None,
+        description="Base64-encoded speech audio (exactly one of 'audio'/'text').",
+    )
+    text: str | None = Field(
+        None,
+        description="Spoken text recorded directly (exactly one of 'audio'/'text').",
+    )
+    conversation_id: str | None = Field(
+        None,
+        description="Continue an existing conversation; omitted continues the session's own.",
+    )
+    agent: str | None = Field(
+        None, description="Agent to handle the turn; defaults to the core agent."
+    )
+    title: str | None = Field(
+        None, description="Optional title when starting a new conversation."
+    )
+    project_id: str | None = Field(
+        None, description="Optional project to scope a new conversation to."
+    )
 
 
 class InterruptResponse(BaseModel):
@@ -170,6 +205,81 @@ async def respond(body: RespondRequest) -> dict:
     _session_or_404(engine, body.session_id)
     clip = await engine.respond(body.session_id, body.text)
     return clip.to_dict()
+
+
+def _serialize_converse(outcome: VoiceChatOutcome) -> dict:
+    """Render a :class:`VoiceChatOutcome` as the API response payload."""
+    usage = None
+    if outcome.usage is not None:
+        usage = {
+            "prompt_tokens": outcome.usage.prompt_tokens,
+            "completion_tokens": outcome.usage.completion_tokens,
+            "total_tokens": outcome.usage.total_tokens,
+        }
+    return {
+        "utterance": outcome.utterance.to_dict(),
+        "conversation_id": outcome.conversation_id,
+        "reply": outcome.reply,
+        "agent": outcome.agent,
+        "model": outcome.model,
+        "provider": outcome.provider,
+        "simulated": outcome.simulated,
+        "tool_calls_made": outcome.tool_calls_made,
+        "usage": usage,
+        "clip": outcome.clip.to_dict(),
+        "pending_confirmations": outcome.pending_confirmations,
+    }
+
+
+@router.post("/converse", status_code=201, summary="Full voice conversation turn")
+async def converse(
+    body: ConverseRequest,
+    session: AsyncSession = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    chat_service: ChatService = Depends(get_chat_service),
+) -> dict:
+    """Run one voice turn end to end: speech -> STT -> agent loop -> LLM -> TTS.
+
+    The utterance is transcribed wake-word aware, sent through the configured
+    conversation/agent/LLM chain (including real tool calling when a real
+    provider is configured), and the reply is synthesized into a spoken clip.
+    With the hermetic mock providers the whole chain is simulated and
+    ``simulated`` reports ``True`` honestly — nothing is fabricated.
+    """
+    engine = get_voice_engine()
+    _session_or_404(engine, body.session_id)
+
+    if (body.audio is None) == (body.text is None):
+        raise HTTPException(
+            status_code=400,
+            detail="Provide exactly one of 'audio' or 'text' for a voice turn.",
+        )
+
+    audio: bytes | None = None
+    if body.audio is not None:
+        try:
+            audio = base64.b64decode(body.audio)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid base64 audio: {exc}") from exc
+        if len(audio) > settings.voice_max_audio_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Audio exceeds {settings.voice_max_audio_bytes} bytes.",
+            )
+
+    service = VoiceChatService(voice=engine, chat=chat_service)
+    outcome = await service.converse(
+        session,
+        settings,
+        session_id=body.session_id,
+        audio=audio,
+        text=body.text,
+        conversation_id=body.conversation_id,
+        agent=body.agent,
+        title=body.title,
+        project_id=body.project_id,
+    )
+    return _serialize_converse(outcome)
 
 
 @router.get("/audio/{audio_id}", summary="Fetch synthesized audio (WAV)")

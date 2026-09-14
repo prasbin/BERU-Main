@@ -119,6 +119,11 @@ class ChatService:
         self._semantic = memory if isinstance(memory, SemanticMemory) else None
         self._confirmations = confirmations or get_confirmation_service()
 
+    @property
+    def provider_name(self) -> str:
+        """The LLM provider wired to this service's engine (e.g. ``"mock"``)."""
+        return self._engine.provider.name
+
     def _store_confirmations(
         self,
         *,

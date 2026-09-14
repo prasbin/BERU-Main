@@ -114,10 +114,14 @@ class VoiceSession:
     clips: list[AudioClip] = field(default_factory=list)
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     last_activity: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    #: Chat conversation bound to this session's voice turns (set by the voice
+    #: conversation chain so consecutive utterances continue the same thread).
+    conversation_id: str | None = None
 
     def to_dict(self) -> dict:
         return {
             "session_id": self.session_id,
+            "conversation_id": self.conversation_id,
             "state": self.state.value,
             "wake_words": list(self.wake_words),
             "buffer_bytes": len(self.buffer),

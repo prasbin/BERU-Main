@@ -27,14 +27,21 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
+from backend.agents.registry import get_agent_registry
 from backend.core.config import Settings
 from backend.engines.browser import BrowserAction, get_browser_engine
 from backend.engines.clipboard import get_clipboard_engine
+from backend.engines.intelligence import IntelligenceEngine
+from backend.engines.llm.openai_compatible import OpenAICompatibleProvider
 from backend.engines.screenshot import get_screenshot_engine
 from backend.engines.speech import build_stt_provider, build_tts_provider
 from backend.engines.speech.edge_tts import build_edge_tts
 from backend.engines.speech.whisper import build_whisper_stt
 from backend.engines.voice import VoiceEngine
+from backend.memory.conversation_memory import ConversationMemory
+from backend.services.chat_service import ChatService
+from backend.services.conversation_service import ConversationService
+from backend.services.voice_chat import VoiceChatService
 from backend.tools.voice import VoiceListenTool, VoiceSpeakTool, build_engine
 
 
@@ -48,6 +55,25 @@ def _require_live_hw() -> None:
             "Live-hardware tests are opt-in: set BERU_LIVE_HW_TESTS=1 "
             "(see tests/test_live_hardware.py)."
         )
+
+
+def _live_llm_config() -> dict[str, str] | None:
+    """Return a real-provider config when the operator opted in, else ``None``.
+
+    Mirrors the gate in tests/test_real_llm_live.py so the live chain only fires
+    real HTTP requests behind the explicit BERU_REAL_LLM_SMOKE=1 opt-in.
+    """
+    if os.environ.get("BERU_REAL_LLM_SMOKE", "").strip() != "1":
+        return None
+    base_url = os.environ.get("LLM_BASE_URL", "").strip()
+    model = os.environ.get("LLM_MODEL", "").strip()
+    if not base_url or not model:
+        return None
+    return {
+        "base_url": base_url,
+        "api_key": os.environ.get("LLM_API_KEY", "").strip(),
+        "model": model,
+    }
 
 
 # --------------------------------------------------------------------------- #
@@ -275,3 +301,151 @@ async def test_live_edge_tts_synthesizes_real_mp3() -> None:
     assert result.output["format"] == "mp3"
     assert result.output["bytes"] > 1000
     assert result.output["id"]
+
+
+# --------------------------------------------------------------------------- #
+# Voice conversation chain over the real LLM
+# --------------------------------------------------------------------------- #
+
+def _build_live_chain(config: dict[str, str]):
+    """Build the real provider + chat service wired to the temp suite DB."""
+    provider = OpenAICompatibleProvider(
+        base_url=config["base_url"],
+        api_key=config["api_key"],
+        model=config["model"],
+        timeout=120.0,
+        max_retries=0,  # a live chain test must never hang on retries
+    )
+    chat = ChatService(
+        IntelligenceEngine(provider, get_agent_registry()),
+        ConversationService(),
+        ConversationMemory(),
+    )
+    return provider, chat
+
+
+async def test_live_voice_conversation_chain_real_llm_and_real_tts(_sessionmaker):
+    """Voice chain over the real OpenAI-compatible endpoint + real SAPI TTS.
+
+    Opt-in via BERU_LIVE_HW_TESTS=1 AND the real-LLM smoke gate (BERU_REAL_LLM_SMOKE=1
+    plus LLM_BASE_URL / LLM_MODEL). Text enters the chain, the real model runs the
+    core agent's tool loop, and the reply is spoken by the real Windows SAPI voice.
+    The conversation persists to a fresh temp SQLite database, never ./beru.db.
+    Skipped honestly when the live LLM or hardware is unavailable; never fakes a pass.
+    """
+    _require_live_hw()
+    config = _live_llm_config()
+    if config is None:
+        pytest.skip(
+            "Real-LLM smoke gate not configured "
+            "(BERU_REAL_LLM_SMOKE=1 + LLM_BASE_URL + LLM_MODEL)."
+        )
+
+    voice_settings = Settings(BERU_VOICE_TTS_PROVIDER="sapi")
+    voice = VoiceEngine(
+        stt=build_stt_provider("mock", voice_settings),
+        tts=build_tts_provider("sapi", voice_settings),
+        wake_words=["beru"],
+    )
+    assert voice.status()["tts_provider"] == "SapiTTSProvider"
+
+    provider, chat = _build_live_chain(config)
+    service = VoiceChatService(voice=voice, chat=chat)
+    session = await voice.create_session()
+    chain_settings = Settings(
+        llm_provider="openai_compatible",
+        llm_base_url=config["base_url"],
+        llm_api_key=config["api_key"],
+        llm_model=config["model"],
+    )
+    try:
+        async with _sessionmaker() as db:
+            outcome = await service.converse(
+                db,
+                chain_settings,
+                session_id=session.session_id,
+                text="beru use the clock tool and tell me the current utc time",
+            )
+        assert outcome.provider == "openai_compatible"
+        assert outcome.simulated is False
+        assert outcome.model
+        assert outcome.reply.strip(), "real LLM returned an empty reply"
+        assert outcome.clip.format == "wav"
+        assert outcome.clip.audio[:4] == b"RIFF"
+        assert len(outcome.clip.audio) > 44
+        assert outcome.conversation_id
+        if outcome.tool_calls_made == 0:
+            pytest.skip(
+                "live provider/model returned no tool call on this endpoint — "
+                "the agent tool loop was not exercised"
+            )
+    finally:
+        await provider.aclose()
+
+
+async def test_live_voice_conversation_chain_real_stt_real_llm_real_tts(_sessionmaker):
+    """The full real audio chain: SAPI speech -> whisper STT -> real LLM -> SAPI.
+
+    Opt-in via the same gates as above. The probe phrase is synthesized with the
+    real SAPI voice, buffered as the "captured" audio, transcribed by the real
+    whisper model inside the chain, reasoned on by the real OpenAI-compatible
+    endpoint, and answered with a real SAPI clip. Whisper model size is overridable
+    with BERU_LIVE_STT_MODEL. Skipped honestly when whisper or the live gate is
+    missing.
+    """
+    _require_live_hw()
+    if importlib.util.find_spec("whisper") is None:
+        pytest.skip("openai-whisper not installed (pip install -e .[voice])")
+    config = _live_llm_config()
+    if config is None:
+        pytest.skip(
+            "Real-LLM smoke gate not configured "
+            "(BERU_REAL_LLM_SMOKE=1 + LLM_BASE_URL + LLM_MODEL)."
+        )
+
+    model = (os.environ.get("BERU_LIVE_STT_MODEL", "") or "tiny").strip() or "tiny"
+    settings = Settings(
+        BERU_VOICE_STT_PROVIDER="whisper",
+        BERU_VOICE_STT_MODEL=model,
+        BERU_VOICE_TTS_PROVIDER="sapi",
+    )
+    # Source checkouts don't install BERU's own entry points, so construct the
+    # first-party provider directly (mirrors the existing live whisper test).
+    voice = VoiceEngine(
+        stt=build_whisper_stt(settings),
+        tts=build_tts_provider("sapi", settings),
+        wake_words=["beru"],
+    )
+    assert voice.status()["stt_provider"] == "WhisperSTTProvider"
+
+    provider, chat = _build_live_chain(config)
+    service = VoiceChatService(voice=voice, chat=chat)
+    session = await voice.create_session()
+    probe = await voice.respond(
+        session.session_id, "this is the live voice conversation chain test"
+    )
+    chain_settings = Settings(
+        llm_provider="openai_compatible",
+        llm_base_url=config["base_url"],
+        llm_api_key=config["api_key"],
+        llm_model=config["model"],
+    )
+    try:
+        async with _sessionmaker() as db:
+            outcome = await service.converse(
+                db,
+                chain_settings,
+                session_id=session.session_id,
+                audio=probe.audio,
+            )
+        assert outcome.utterance is not None
+        assert outcome.utterance.text, "whisper returned no transcript for the clip"
+        assert outcome.utterance.was_wake is False
+        assert outcome.provider == "openai_compatible"
+        assert outcome.simulated is False
+        assert outcome.reply.strip(), "real LLM returned an empty reply"
+        assert outcome.clip.format == "wav"
+        assert len(outcome.clip.audio) > 44
+        assert outcome.conversation_id
+    finally:
+        await provider.aclose()
